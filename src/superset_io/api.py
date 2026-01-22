@@ -1,4 +1,5 @@
 import json
+
 import requests
 
 
@@ -28,9 +29,9 @@ class Session(requests.Session):
             }
         )
 
-    def request(self, method: str, url: str, *args, **kwargs):
+    def request(self, method: str | bytes, url: str | bytes, *args, **kwargs):
         # Prepend base_url if not already present
-        if not url.startswith("http"):
+        if isinstance(url, str) and not url.startswith("http"):
             url = f"{self.base_url}{url}"
         return super().request(method, url, *args, **kwargs)
 

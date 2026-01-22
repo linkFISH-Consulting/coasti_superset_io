@@ -17,3 +17,27 @@ coasti-superset-io = "coasti_superset_io:main"
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.14.13",
+    "types-requests>=2.32.4.20260107",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "ISC", # flake8-implicit-str-concat
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "PTH", # Use pathlib instead of os.path
+    "W",   # pycodestyle
+]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_untyped_decorators = true
+allow_redefinition = true
