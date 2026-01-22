@@ -1,3 +1,4 @@
+import json
 import requests
 
 
@@ -49,5 +50,45 @@ class SuperSetApiClient:
     def get_dashboards(self):
         url = f"{self.session.base_url}/api/v1/dashboard/"
         response = self.session.get(url)
+        response.raise_for_status()
+        return response.json()
+
+    def export_dashboard(self, dashboard_id: int):
+        url = f"{self.session.base_url}/api/v1/dashboard/export/"
+        response = self.session.get(url, params={"q": [dashboard_id]})
+        response.raise_for_status()
+        return response.content
+
+    def import_dashboard(
+        self,
+        dashboard_data: bytes,
+        overwrite: bool = False,
+        passwords: dict[str, str] | None = None,
+        ssh_tunnel_passwords: dict[str, str] | None = None,
+        ssh_tunnel_private_key_passwords: dict[str, str] | None = None,
+        ssh_tunnel_private_keys: dict[str, str] | None = None,
+    ):
+        # TODO: Might need some tweaking
+        url = f"{self.session.base_url}/api/v1/dashboard/import/"
+
+        # Prepare form data
+        data = {}
+        if overwrite:
+            data["overwrite"] = "true"
+        if passwords:
+            data["passwords"] = json.dumps(passwords)
+        if ssh_tunnel_passwords:
+            data["ssh_tunnel_passwords"] = json.dumps(ssh_tunnel_passwords)
+        if ssh_tunnel_private_key_passwords:
+            data["ssh_tunnel_private_key_passwords"] = json.dumps(
+                ssh_tunnel_private_key_passwords
+            )
+        if ssh_tunnel_private_keys:
+            data["ssh_tunnel_private_keys"] = json.dumps(ssh_tunnel_private_keys)
+
+        # Prepare file upload
+        files = {"file": ("dashboard.json", dashboard_data, "application/json")}
+
+        response = self.session.post(url, data=data, files=files)
         response.raise_for_status()
         return response.json()
