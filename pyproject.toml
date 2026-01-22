@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-coasti-superset-io = "coasti_superset_io:main"
+superset-io = "superset_io:cli.app"
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]

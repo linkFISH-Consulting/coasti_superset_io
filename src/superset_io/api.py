@@ -3,7 +3,7 @@ import json
 import requests
 
 
-class Session(requests.Session):
+class SupersetApiSession(requests.Session):
     base_url: str
     access_token: str
     csrf_token: str
@@ -37,9 +37,9 @@ class Session(requests.Session):
 
 
 class SuperSetApiClient:
-    session: Session
+    session: SupersetApiSession
 
-    def __init__(self, session: Session):
+    def __init__(self, session: SupersetApiSession):
         self.session = session
 
     def get_dashboard(self, dashboard_id: int):
