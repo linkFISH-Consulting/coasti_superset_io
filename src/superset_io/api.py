@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+from typing import Self
 
 import requests
 
@@ -34,6 +37,59 @@ class SupersetApiSession(requests.Session):
         if isinstance(url, str) and not url.startswith("http"):
             url = f"{self.base_url}{url}"
         return super().request(method, url, *args, **kwargs)
+
+    @classmethod
+    def from_credentials(
+        cls,
+        base_url: str,
+        username: str,
+        password: str,
+    ) -> Self:
+        """Authenticate and return an authenticated SupersetApiSession."""
+        # Obtain bearer token
+        res = requests.post(
+            f"{base_url}/api/v1/security/login",
+            headers={"Content-Type": "application/json"},
+            json={
+                "username": username,
+                "password": password,
+                "provider": "db",
+                "refresh": False,
+            },
+            verify=True,
+        )
+        res.raise_for_status()
+        access_token = res.json().get("access_token")
+
+        return cls.from_token(
+            base_url=base_url,
+            access_token=access_token,
+        )
+
+    @classmethod
+    def from_token(
+        cls,
+        base_url: str,
+        access_token: str,
+    ) -> Self:
+        """Create a SupersetApiSession from an existing access token."""
+        # Obtain CSRF token
+        res = requests.get(
+            f"{base_url}/api/v1/security/csrf_token",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            verify=True,
+        )
+        res.raise_for_status()
+        csrf_token = res.json().get("result")
+
+        return cls(
+            base_url=base_url,
+            access_token=access_token,
+            csrf_token=csrf_token,
+        )
 
 
 class SuperSetApiClient:

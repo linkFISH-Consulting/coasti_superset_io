@@ -2,7 +2,6 @@
 import logging
 from typing import cast
 
-import requests
 import typer
 
 from .api import SuperSetApiClient, SupersetApiSession
@@ -41,50 +40,28 @@ def auth(
     if access_token is None:
         if username is None:
             username = typer.prompt("Username", type=str)
+            username = cast(str, username)
 
         if password is None:
             password = typer.prompt("Password", type=str, hide_input=True)
+            password = cast(str, password)
 
-        log.info("Accquiring access token")
-
-        # bearer token
-        res = requests.post(
-            f"{base_url}/api/v1/security/login",
-            headers={"Content-Type": "application/json"},
-            json={
-                "username": username,
-                "password": password,
-                "provider": "db",
-                "refresh": False,
-            },
-            verify=True,
+        log.info("Acquiring access token")
+        session = SupersetApiSession.from_credentials(
+            base_url=base_url,
+            username=username,
+            password=password,
+        )
+    else:
+        log.info("Using provided access token")
+        session = SupersetApiSession.from_token(
+            base_url=base_url,
+            access_token=access_token,
         )
 
-        res.raise_for_status()
-        access_token = cast(str, res.json().get("access_token"))
-        log.debug("Obtained bearer token")
-
-    # csrf
-    res = requests.get(
-        f"{base_url}/api/v1/security/csrf_token",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        },
-        verify=True,
-    )
-    res.raise_for_status()
-    csrf_token = res.json().get("result")
-
-    session = SupersetApiSession(
-        base_url=base_url,
-        access_token=access_token,
-        csrf_token=csrf_token,
-    )
     superset_api = SuperSetApiClient(session)
 
 
 @app.command()
-def main(
-):
+def main():
     return 0
