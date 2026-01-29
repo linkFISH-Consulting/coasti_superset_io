@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
 import json
+import zipfile
+from pathlib import Path
 from typing import Self
 
 import requests
@@ -31,11 +34,22 @@ class SupersetApiSession(requests.Session):
                 "X-CSRFToken": csrf_token,
             }
         )
+        self.access_token = access_token
+        self.csrf_token = csrf_token
+
+    def _get_domain(self, url: str) -> str:
+        """Extract domain from URL for cookie setting."""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        return parsed.hostname or ""
 
     def request(self, method: str | bytes, url: str | bytes, *args, **kwargs):
         # Prepend base_url if not already present
         if isinstance(url, str) and not url.startswith("http"):
             url = f"{self.base_url}{url}"
+
+        # Headers might be
         return super().request(method, url, *args, **kwargs)
 
     @classmethod
@@ -110,42 +124,85 @@ class SuperSetApiClient:
         response.raise_for_status()
         return response.json()
 
-    def export_dashboard(self, dashboard_id: int):
-        url = f"{self.session.base_url}/api/v1/dashboard/export/"
-        response = self.session.get(url, params={"q": [dashboard_id]})
+    def export_dashboard(self, dashboard_id: int) -> zipfile.ZipFile:
+        url = f"{self.session.base_url}/api/v1/dashboard/export"
+        response = self.session.get(
+            url,
+            params={"q": json.dumps([dashboard_id])},
+        )
         response.raise_for_status()
-        return response.content
+
+        # if the zip gets big we might need to consider streaming
+        zip_content = io.BytesIO(response.content)
+        return zipfile.ZipFile(zip_content, "r")
 
     def import_dashboard(
         self,
-        dashboard_data: bytes,
+        zipfile_buffer: io.BytesIO | Path | bytes,
         overwrite: bool = False,
         passwords: dict[str, str] | None = None,
         ssh_tunnel_passwords: dict[str, str] | None = None,
         ssh_tunnel_private_key_passwords: dict[str, str] | None = None,
         ssh_tunnel_private_keys: dict[str, str] | None = None,
     ):
-        # TODO: Might need some tweaking
         url = f"{self.session.base_url}/api/v1/dashboard/import/"
 
-        # Prepare form data
-        data = {}
+        # Get the zip content
+        if isinstance(zipfile_buffer, io.BytesIO):
+            zip_content = zipfile_buffer.getvalue()
+        elif isinstance(zipfile_buffer, Path):
+            zip_content = zipfile_buffer.read_bytes()
+        elif isinstance(zipfile_buffer, bytes):
+            zip_content = zipfile_buffer
+        else:
+            raise ValueError("zipfile must be io.BytesIO, Path, or bytes")
+
+        # Build multipart form data with MultipartEncoder
+
+        # Build fields in EXACT order as working request
+        fields = [
+            (
+                "formData",
+                (
+                    "dashboard_export_20260129T133411.zip",
+                    zip_content,
+                    "application/zip",
+                ),
+            ),
+            ("passwords", json.dumps(passwords) if passwords else "{}"),
+        ]
+
         if overwrite:
-            data["overwrite"] = "true"
-        if passwords:
-            data["passwords"] = json.dumps(passwords)
-        if ssh_tunnel_passwords:
-            data["ssh_tunnel_passwords"] = json.dumps(ssh_tunnel_passwords)
-        if ssh_tunnel_private_key_passwords:
-            data["ssh_tunnel_private_key_passwords"] = json.dumps(
-                ssh_tunnel_private_key_passwords
-            )
-        if ssh_tunnel_private_keys:
-            data["ssh_tunnel_private_keys"] = json.dumps(ssh_tunnel_private_keys)
+            fields.append(("overwrite", "true"))
 
-        # Prepare file upload
-        files = {"file": ("dashboard.json", dashboard_data, "application/json")}
+        fields.extend(
+            [
+                (
+                    "ssh_tunnel_passwords",
+                    json.dumps(ssh_tunnel_passwords) if ssh_tunnel_passwords else "{}",
+                ),
+                (
+                    "ssh_tunnel_private_keys",
+                    json.dumps(ssh_tunnel_private_keys)
+                    if ssh_tunnel_private_keys
+                    else "{}",
+                ),
+                (
+                    "ssh_tunnel_private_key_passwords",
+                    json.dumps(ssh_tunnel_private_key_passwords)
+                    if ssh_tunnel_private_key_passwords
+                    else "{}",
+                ),
+            ]
+        )
 
-        response = self.session.post(url, data=data, files=files)
+        # Convert to dict for MultipartEncoder
+        fields_dict = dict(fields)
+
+        response = self.session.post(
+            url,
+            files=fields_dict,
+            headers={**self.session.headers, "Content-Type": "multipart/form-data"},
+        )
         response.raise_for_status()
-        return response.json()
+        return response
