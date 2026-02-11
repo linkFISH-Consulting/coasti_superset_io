@@ -33,8 +33,7 @@ class SupersetApiSession(requests.Session):
         self.csrf_token = csrf_token
 
         headers = {
-            "User-Agent": "coasti-superset-import-export/1.0.0",
-            "Content-Type": "application/json",
+            "User-Agent": "coasti-superset-import-export/1.0.0"
         }
         if bearer_token:
             headers["Authorization"] = f"Bearer {bearer_token}"
@@ -100,7 +99,6 @@ class SupersetApiSession(requests.Session):
         session.csrf_token = csrf_token
         session.headers["X-CSRFToken"] = csrf_token
         return session
-
 
     def _get_bearer_token(self, username: str, password: str) -> str:
         """Get a bearer access token"""
@@ -186,10 +184,9 @@ class SupersetApiSession(requests.Session):
         )
         res.raise_for_status()
 
-
         res = self.get("/api/v1/security/csrf_token/")
         res.raise_for_status()
-        csrf = res.json()["result"] # TODO: Check, is this the same csrf as before?
+        csrf = res.json()["result"]  # TODO: Check, is this the same csrf as before?
 
         self.headers["X-CSRFToken"] = csrf
         self.csrf_token = csrf
@@ -252,7 +249,6 @@ class SuperSetApiClient:
         ssh_tunnel_private_key_passwords: dict[str, str] | None = None,
         ssh_tunnel_private_keys: dict[str, str] | None = None,
     ):
-        url = f"{self.session.base_url}/api/v1/dashboard/import/"
 
         # Get the zip content
         if isinstance(zipfile_buffer, io.BytesIO):
@@ -264,52 +260,62 @@ class SuperSetApiClient:
         else:
             raise ValueError("zipfile must be io.BytesIO, Path, or bytes")
 
-        # Build multipart form data with MultipartEncoder
+        # print layout of the created zip_content
+        with zipfile.ZipFile(io.BytesIO(zip_content)) as zf:
+            log.info("ZIP file contents:")
+            for info in zf.infolist():
+                log.info(f"  {info.filename}  ({info.file_size} bytes)")
 
-        # Build fields in EXACT order as working request
-        fields = [
-            (
-                "formData",
-                (
-                    "dashboard_export_20260129T133411.zip",
-                    zip_content,
-                    "application/zip",
-                ),
+        # IMPORTANT: only the file goes into `files=`
+        multipart_files = {
+            "bundle": (
+                "dashboard_export.zip",
+                zip_content,
+                "application/zip",
+            )
+        }
+
+        # IMPORTANT: all non-file fields go into `data=`
+        form_data = {
+            "passwords": json.dumps(passwords or {}),
+            "ssh_tunnel_passwords": json.dumps(ssh_tunnel_passwords or {}),
+            "ssh_tunnel_private_keys": json.dumps(ssh_tunnel_private_keys or {}),
+            "ssh_tunnel_private_key_passwords": json.dumps(
+                ssh_tunnel_private_key_passwords or {}
             ),
-            ("passwords", json.dumps(passwords) if passwords else "{}"),
-        ]
-
+        }
         if overwrite:
-            fields.append(("overwrite", "true"))
+            form_data["overwrite"] = "true"
 
-        fields.extend(
-            [
-                (
-                    "ssh_tunnel_passwords",
-                    json.dumps(ssh_tunnel_passwords) if ssh_tunnel_passwords else "{}",
-                ),
-                (
-                    "ssh_tunnel_private_keys",
-                    json.dumps(ssh_tunnel_private_keys)
-                    if ssh_tunnel_private_keys
-                    else "{}",
-                ),
-                (
-                    "ssh_tunnel_private_key_passwords",
-                    json.dumps(ssh_tunnel_private_key_passwords)
-                    if ssh_tunnel_private_key_passwords
-                    else "{}",
-                ),
-            ]
+        # IMPORTANT: ensure JSON content-type is NOT sent
+        headers = dict(self.session.headers)
+        headers.pop("Content-Type", None)
+
+        log.info(headers)
+
+        res = self.session.post(
+            "/api/v1/assets/import/",
+            files=multipart_files,
+            data=form_data,
+            headers=headers,
         )
 
-        # Convert to dict for MultipartEncoder
-        fields_dict = dict(fields)
+        # helpful for debugging:
+        # import http.client as http_client
+        # http_client.HTTPConnection.debuglevel = 1
+        # logging.basicConfig(level=logging.DEBUG)
+        # logging.getLogger("urllib3").setLevel(logging.DEBUG)
+        # logging.getLogger("urllib3").propagate = True
 
-        response = self.session.post(
-            url,
-            files=fields_dict,
-            headers={**self.session.headers, "Content-Type": "multipart/form-data"},
-        )
-        response.raise_for_status()
-        return response
+        print(res.text)
+        print(res.json())
+        print(res.request.headers.get("Content-Type"))
+
+        try:
+            res.raise_for_status()
+        except:
+            log.error(res.text)
+
+        return res
+
+
