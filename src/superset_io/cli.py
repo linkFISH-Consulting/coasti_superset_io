@@ -56,7 +56,7 @@ def auth(
         log.info("Using provided access token")
         session = SupersetApiSession.from_token(
             base_url=base_url,
-            access_token=access_token,
+            bearer_token=access_token,
         )
 
     superset_api = SuperSetApiClient(session)
