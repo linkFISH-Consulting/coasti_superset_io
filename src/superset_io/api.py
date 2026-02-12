@@ -34,9 +34,7 @@ class SupersetApiSession(requests.Session):
         self.bearer_token = bearer_token
         self.csrf_token = csrf_token
 
-        headers = {
-            "User-Agent": "coasti-superset-import-export/1.0.0"
-        }
+        headers = {"User-Agent": "coasti-superset-import-export/1.0.0"}
         if bearer_token:
             headers["Authorization"] = f"Bearer {bearer_token}"
         if csrf_token:
@@ -251,7 +249,6 @@ class SuperSetApiClient:
         ssh_tunnel_private_key_passwords: dict[str, str] | None = None,
         ssh_tunnel_private_keys: dict[str, str] | None = None,
     ):
-
         # Get the zip content
         if isinstance(zipfile_buffer, io.BytesIO):
             zip_content = zipfile_buffer.getvalue()
@@ -301,5 +298,3 @@ class SuperSetApiClient:
         res.raise_for_status()
 
         return res
-
-

@@ -30,6 +30,7 @@ def zipfile_buffer_from_folder(folder: Path | str) -> io.BytesIO:
     buffer.seek(0)
     return buffer
 
+
 def zipfile_buffer_from_zipfile(zip_path: Path | str) -> io.BytesIO:
     """Create an in-memory copy of an existing .zip file.
     Args:
@@ -48,7 +49,6 @@ def zipfile_buffer_from_zipfile(zip_path: Path | str) -> io.BytesIO:
     return buffer
 
 
-
 def validate_assets_bundle_structure(zip_buffer: io.BytesIO | bytes | Path) -> None:
     """
     Check that a zip files structure will be accepted by /api/v1/assets/import.
@@ -65,7 +65,7 @@ def validate_assets_bundle_structure(zip_buffer: io.BytesIO | bytes | Path) -> N
     """
 
     zip_io: io.BytesIO | str
-    if isinstance(zip_buffer, bytes):
+    if isinstance(zip_buffer, (bytes, memoryview, bytearray)):
         zip_io = io.BytesIO(zip_buffer)
     elif isinstance(zip_buffer, Path):
         zip_io = str(zip_buffer)
