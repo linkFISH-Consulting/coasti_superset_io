@@ -3,13 +3,9 @@ name = "superset-io"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-]
-requires-python = ">=3.13"
-dependencies = [
-    "requests>=2.32.5",
-    "typer>=0.21.1",
-]
+authors = []
+requires-python = ">=3.11"
+dependencies = ["requests>=2.32.5", "typer>=0.21.1"]
 
 [project.scripts]
 superset-io = "superset_io:cli.app"
@@ -20,10 +16,16 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "mypy>=1.19.1",
-    "ruff>=0.14.13",
-    "types-requests>=2.32.4.20260107",
+    { include-group = "lint" },
+    { include-group = "typed" },
+    "pre-commit>=4.5.1",
 ]
+
+lint = ["ruff>=0.14.13"]
+typed = ["mypy>=1.19.1", "types-requests>=2.32.4.20260107"]
+
+[tool.ruff]
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -35,10 +37,6 @@ select = [
     "UP",  # pyupgrade
     "PTH", # Use pathlib instead of os.path
     "W",   # pycodestyle
-]
-exclude = [
-    "docs/**/*.ipynb",
-    "**/.ipynb_checkpoints",
 ]
 
 [tool.mypy]

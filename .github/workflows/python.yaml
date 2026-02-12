@@ -72,7 +72,7 @@ jobs:
         uses: astral-sh/setup-uv@v7
       - name: Install dependencies
         run: |
-          uv sync --all-extras
+          uv sync --group typed
       - name: Check type hints with mypy
         run: |
           uv run mypy --show-error-codes --check-untyped-defs --config-file ./pyproject.toml ./
