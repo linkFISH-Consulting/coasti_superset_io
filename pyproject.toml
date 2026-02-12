@@ -36,6 +36,10 @@ select = [
     "PTH", # Use pathlib instead of os.path
     "W",   # pycodestyle
 ]
+exclude = [
+    "docs/**/*.ipynb",
+    "**/.ipynb_checkpoints",
+]
 
 [tool.mypy]
 check_untyped_defs = true

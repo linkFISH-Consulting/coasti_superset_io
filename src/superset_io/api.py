@@ -3,13 +3,15 @@ from __future__ import annotations
 import base64
 import io
 import json
+import logging
 import re
 import zipfile
-import logging
 from pathlib import Path
 from typing import Self
 
 import requests
+
+from superset_io.utils import validate_assets_bundle_structure
 
 log = logging.getLogger("superset_io")
 
@@ -228,8 +230,8 @@ class SuperSetApiClient:
         response.raise_for_status()
         return response.json()
 
-    def export_dashboard(self, dashboard_id: int) -> zipfile.ZipFile:
-        url = f"{self.session.base_url}/api/v1/dashboard/export"
+    def export_dashboard(self, dashboard_id: int):
+        url = f"{self.session.base_url}/api/v1/assets/export"
         response = self.session.get(
             url,
             params={"q": json.dumps([dashboard_id])},
@@ -237,8 +239,8 @@ class SuperSetApiClient:
         response.raise_for_status()
 
         # if the zip gets big we might need to consider streaming
-        zip_content = io.BytesIO(response.content)
-        return zipfile.ZipFile(zip_content, "r")
+        zip_bytes = response.content
+        return zip_bytes, zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
 
     def import_dashboard(
         self,
@@ -260,23 +262,20 @@ class SuperSetApiClient:
         else:
             raise ValueError("zipfile must be io.BytesIO, Path, or bytes")
 
-        # print layout of the created zip_content
-        with zipfile.ZipFile(io.BytesIO(zip_content)) as zf:
-            log.info("ZIP file contents:")
-            for info in zf.infolist():
-                log.info(f"  {info.filename}  ({info.file_size} bytes)")
+        # raise for invalid zips, already before trying the endpoint
+        validate_assets_bundle_structure(zipfile_buffer)
 
-        # IMPORTANT: only the file goes into `files=`
-        multipart_files = {
+        # only the file goes into `files=`
+        files = {
             "bundle": (
-                "dashboard_export.zip",
+                "name_does_not_matter.zip",
                 zip_content,
                 "application/zip",
             )
         }
 
-        # IMPORTANT: all non-file fields go into `data=`
-        form_data = {
+        # all non-file fields go into `data=`
+        data = {
             "passwords": json.dumps(passwords or {}),
             "ssh_tunnel_passwords": json.dumps(ssh_tunnel_passwords or {}),
             "ssh_tunnel_private_keys": json.dumps(ssh_tunnel_private_keys or {}),
@@ -285,36 +284,21 @@ class SuperSetApiClient:
             ),
         }
         if overwrite:
-            form_data["overwrite"] = "true"
+            data["overwrite"] = "true"
 
-        # IMPORTANT: ensure JSON content-type is NOT sent
+        # ensure content-type is not set, to allow requests.post to set it.
+        # this is needed so the boundary (file length) is also set automatically
         headers = dict(self.session.headers)
         headers.pop("Content-Type", None)
 
-        log.info(headers)
-
         res = self.session.post(
             "/api/v1/assets/import/",
-            files=multipart_files,
-            data=form_data,
+            files=files,
+            data=data,
             headers=headers,
         )
 
-        # helpful for debugging:
-        # import http.client as http_client
-        # http_client.HTTPConnection.debuglevel = 1
-        # logging.basicConfig(level=logging.DEBUG)
-        # logging.getLogger("urllib3").setLevel(logging.DEBUG)
-        # logging.getLogger("urllib3").propagate = True
-
-        print(res.text)
-        print(res.json())
-        print(res.request.headers.get("Content-Type"))
-
-        try:
-            res.raise_for_status()
-        except:
-            log.error(res.text)
+        res.raise_for_status()
 
         return res
 
