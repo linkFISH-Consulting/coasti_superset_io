@@ -5,7 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 authors = []
 requires-python = ">=3.11"
-dependencies = ["requests>=2.32.5", "typer>=0.21.1"]
+dependencies = [
+    "requests>=2.32.5",
+    "typer>=0.21.1",
+    "python-dotenv>=1.2.1",
+]
+
 
 [project.scripts]
 superset-io = "superset_io:cli.app"

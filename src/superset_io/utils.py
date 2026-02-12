@@ -6,6 +6,15 @@ from pathlib import Path
 log = logging.getLogger("superset_io")
 
 
+def get_version():
+    from importlib import metadata
+
+    try:
+        return metadata.version("superset-io")
+    except metadata.PackageNotFoundError:
+        return "[not found] Use `uv sync` when developing!"
+
+
 def zipfile_buffer_from_folder(folder: Path | str) -> io.BytesIO:
     """Create a zipfile.ZipFile object from a folder path in memory.
     Args:

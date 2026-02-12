@@ -7,7 +7,7 @@ import logging
 import re
 import zipfile
 from pathlib import Path
-from typing import Self
+from typing import Self, cast
 
 import requests
 
@@ -64,14 +64,16 @@ class SupersetApiSession(requests.Session):
         """Authenticate and return an authenticated SupersetApiSession."""
         session = cls(base_url=base_url)
 
-        bearer_token = session._get_bearer_token(username, password)
-        session.bearer_token = bearer_token
-        session.headers["Authorization"] = f"Bearer {bearer_token}"
-
-        # quick validation, some endpoints dont need csrf.
-        # no need to continue if this fails already
-        res = session.get("/api/v1/dashboard/")
-        res.raise_for_status()
+        try:
+            bearer_token = session._get_bearer_token(username, password)
+            session.bearer_token = bearer_token
+            session.headers["Authorization"] = f"Bearer {bearer_token}"
+        except requests.HTTPError:
+            log.debug("Failed to get bearer token")
+            bearer_token = cast(str, None)
+            # Some features work without authentication, in particular connection test.
+            # A bit dirty, we should not pass None to `from_token`, but I do not want
+            # to change the type hint of the public classmethod.
 
         try:
             session = cls.from_token(base_url, bearer_token, session=session)
@@ -95,9 +97,12 @@ class SupersetApiSession(requests.Session):
             session = cls(base_url=base_url, bearer_token=bearer_token)
 
         # get csrf for api writes
-        csrf_token = session._get_csrf_via_bearer()
-        session.csrf_token = csrf_token
-        session.headers["X-CSRFToken"] = csrf_token
+        try:
+            csrf_token = session._get_csrf_via_bearer()
+            session.csrf_token = csrf_token
+            session.headers["X-CSRFToken"] = csrf_token
+        except requests.HTTPError:
+            log.debug("Failed to get csrf token")
         return session
 
     def _get_bearer_token(self, username: str, password: str) -> str:
@@ -115,11 +120,7 @@ class SupersetApiSession(requests.Session):
             verify=True,
         )
 
-        try:
-            res.raise_for_status()
-        except:
-            log.error(res.text)
-            raise
+        res.raise_for_status()
 
         token = res.json().get("access_token")
         log.debug(f"access token algorithm {self._jwt_header(token)}")
@@ -141,11 +142,7 @@ class SupersetApiSession(requests.Session):
                     "or use cookie/session auth."
                 )
 
-            try:
-                res.raise_for_status()
-            except:
-                log.error(res.text)
-                raise
+            res.raise_for_status()
 
         return res.json()["result"]
 
@@ -215,6 +212,78 @@ class SuperSetApiClient:
 
     def __init__(self, session: SupersetApiSession):
         self.session = session
+
+    def test_connection(self) -> bool:
+        """
+        Smoke test that:
+        0) We can connect via /health
+        1) Bearer auth is accepted (GET /api/v1/log/)
+        2) CSRF token header is accepted (POST /api/v1/assets/import/)
+
+        Raises requests.HTTPError on unexpected failures.
+        """
+
+        # 0) Server reachable
+        res = self.session.get("/health")
+        try:
+            res.raise_for_status()
+            log.info("✅ Server is reachable.")
+        except Exception as e:
+            log.error(f"❌ Server not reachable: {e}")
+
+        # 1) Access token works
+        res = self.session.get("/api/v1/log/")
+        try:
+            res.raise_for_status()
+            log.info("✅ Access token working, can download assets.")
+        except Exception as e:
+            msg = "❌ Could not access API that requires bearer token"
+            if res.status_code == 401:
+                msg += (
+                    ". Check credentials and JWT_ALGORITHM in your superset_config.py"
+                )
+            log.error(f"{msg}\n  {e}")
+
+        # 2) CSRF works: pick a POST endpoint that requires CSRF,
+        # Send invalid payload so we don't create anything.
+        # Expectation:
+        #   - If CSRF is missing/invalid => typically 400/403 (CSRF-related)
+        #   - If CSRF is accepted       => typically 400/422 (payload validation) or 403
+        if not self.session.headers.get("X-CSRFToken"):
+            log.error(
+                "❌ No X-CSRFToken set on session; cannot validate CSRF handling."
+            )
+        else:
+            res = self.session.post(
+                "/api/v1/assets/import/",
+                json={},  # invalid; we only want to get past CSRF
+            )
+
+            if res.status_code in (400, 401, 403, 422):
+                # Heuristic: distinguish "blocked by CSRF" vs
+                # "passed CSRF but failed validation/permission"
+                body = (res.text or "").lower()
+                if "csrf" in body:
+                    log.error(
+                        f"❌  CSRF appears to be rejected: {res.status_code} {res.text}"
+                    )
+                try:
+                    error = res.json()["errors"][0]["error_type"]
+                    if error == "INVALID_PAYLOAD_FORMAT_ERROR":
+                        log.info("✅ CSRF token working, can upload assets.")
+                        return True
+                except Exception:
+                    pass
+
+            try:
+                # Anything else is unexpected
+                res.raise_for_status()
+                log.info("✅ CSRF token working, can upload assets.")
+                return True
+            except Exception as e:
+                log.error(f"❌ CSRF validation failed: {e} {res.text}")
+
+        return False
 
     def get_dashboard(self, dashboard_id: int):
         url = f"{self.session.base_url}/dashboard/{dashboard_id}"
