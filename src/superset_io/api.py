@@ -265,6 +265,9 @@ class SuperSetApiClient:
             res = self.session.post(
                 "/api/v1/assets/import/",
                 json={},  # invalid; we only want to get past CSRF
+                headers={
+                    "Referer": self.session.base_url.rstrip("/") + "/"
+                }
             )
 
             if res.status_code in (400, 401, 403, 422):
@@ -424,6 +427,7 @@ class SuperSetApiClient:
         # this is needed so the boundary (file length) is also set automatically
         headers = dict(self.session.headers)
         headers.pop("Content-Type", None)
+        headers["Referer"] = self.session.base_url.rstrip("/") + "/"
 
         res = self.session.post(
             "/api/v1/assets/import/",
