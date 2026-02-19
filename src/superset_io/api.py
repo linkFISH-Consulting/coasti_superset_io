@@ -5,13 +5,19 @@ import io
 import json
 import logging
 import re
+import shutil
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import Self, cast
 
 import requests
 
-from superset_io.utils import validate_assets_bundle_structure
+from superset_io.utils import (
+    validate_assets_bundle_structure,
+    zipfile_buffer_from_folder,
+    zipfile_buffer_from_zipfile,
+)
 
 log = logging.getLogger("superset_io")
 
@@ -213,6 +219,8 @@ class SuperSetApiClient:
     def __init__(self, session: SupersetApiSession):
         self.session = session
 
+    # ---------------------------- Public Methods ---------------------------- #
+
     def test_connection(self) -> bool:
         """
         Smoke test that:
@@ -285,31 +293,94 @@ class SuperSetApiClient:
 
         return False
 
-    def get_dashboard(self, dashboard_id: int):
+    def download_assets(self, dst_path: Path):
+        """Download and export all assets to disk.
+
+        Depending an provided dst_path, we either write as zip file or the extracted
+        folder structure.
+        """
+
+        if dst_path.suffix.lower() == ".zip":
+            kind = "zip"
+        else:
+            kind = "folder"
+            dst_path.mkdir(parents=True, exist_ok=True)
+
+        if kind == "folder" and any(dst_path.iterdir()):
+            raise ValueError(f"Destination directory '{dst_path}' is not empty")
+
+        zip_bytes, zip_file = self._get_assets_zip()
+
+        if kind == "zip":
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            with dst_path.open("wb") as f:
+                f.write(zip_bytes)
+        else:
+            # Extract to temp dir, get the assets and move to dst_path
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir)
+                zip_file.extractall(tmp_path)
+
+                src_folders = [
+                    f for f in tmp_path.iterdir() if f.name.startswith("assets_export")
+                ]
+                if len(src_folders) != 1:
+                    raise ValueError(
+                        "Did not find a single `assets_export` folder in zip. "
+                        "This should not happen."
+                    )
+
+                for item in src_folders[0].iterdir():
+                    shutil.move(item, dst_path / item.name)
+
+    def upload_assets(self, src_path: Path):
+        """Upload and restore assets from disk.
+
+        src_path can be zip or directory.
+        If directory, needs to directly contain the metadata.yml.
+        """
+
+        if src_path.suffix.lower() == ".zip":
+            zipfile_buffer = zipfile_buffer_from_zipfile(src_path)
+        else:
+            zipfile_buffer = zipfile_buffer_from_folder(src_path)
+
+        # raise for invalid zips, already before trying the endpoint
+        validate_assets_bundle_structure(zipfile_buffer)
+
+        self._post_assets(zipfile_buffer=zipfile_buffer)
+
+    # ----------------------------- Internal Use ----------------------------- #
+
+    def _get_dashboard(self, dashboard_id: int):
+        """Get a single dashboard.
+
+        For actual downloading, better use more modern assets api."""
         url = f"{self.session.base_url}/dashboard/{dashboard_id}"
         response = self.session.get(url)
         response.raise_for_status()
         return response.json()
 
-    def get_dashboards(self):
+    def _get_dashboards(self):
+        """Get overview all dashboards.
+
+        For actual downloading, better use more modern assets api."""
         url = f"{self.session.base_url}/api/v1/dashboard/"
         response = self.session.get(url)
         response.raise_for_status()
         return response.json()
 
-    def export_dashboard(self, dashboard_id: int):
+    def _get_assets_zip(self):
+        """Get all assets from server as zip."""
         url = f"{self.session.base_url}/api/v1/assets/export"
-        response = self.session.get(
-            url,
-            params={"q": json.dumps([dashboard_id])},
-        )
+        response = self.session.get(url)
         response.raise_for_status()
 
         # if the zip gets big we might need to consider streaming
         zip_bytes = response.content
         return zip_bytes, zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
 
-    def import_dashboard(
+    def _post_assets(
         self,
         zipfile_buffer: io.BytesIO | Path | bytes,
         overwrite: bool = False,
@@ -327,9 +398,6 @@ class SuperSetApiClient:
             zip_content = zipfile_buffer
         else:
             raise ValueError("zipfile must be io.BytesIO, Path, or bytes")
-
-        # raise for invalid zips, already before trying the endpoint
-        validate_assets_bundle_structure(zipfile_buffer)
 
         # only the file goes into `files=`
         files = {

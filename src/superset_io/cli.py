@@ -1,7 +1,7 @@
 # access_token
 import logging
 import os
-import sys
+import shutil
 from pathlib import Path
 from typing import Annotated, cast
 
@@ -40,18 +40,6 @@ def main(
             help="Default: from env var $SUPERSET_ACCESS_TOKEN", hide_input=True
         ),
     ] = None,
-    version: bool = typer.Option(
-        False,
-        "--version",
-        help="Show version and exit.",
-        callback=lambda value: (
-            typer.echo(f"Superset-io version {get_version()}"),
-            sys.exit(0),
-        )
-        if value
-        else None,
-        is_eager=True,
-    ),
 ):
     """
     Superset-IO — Automate import and export of content via superset's REST API
@@ -63,13 +51,6 @@ def main(
         password,
         access_token,
     )
-
-@app.command()
-def test():
-    """Test the connection to your superset instance."""
-
-    assert superset_api is not None
-    superset_api.test_connection()
 
 
 def authenticate(
@@ -130,3 +111,70 @@ def authenticate(
         )
 
     superset_api = SuperSetApiClient(session)
+
+
+@app.command()
+def version():
+    """Shows version and exit."""
+    log.info(f"Coasti version {get_version()}")
+
+    from importlib import metadata
+
+    try:
+        return metadata.version("coasti")
+    except metadata.PackageNotFoundError:
+        return "[not found] Use `uv sync` when developing!"
+
+
+@app.command()
+def test():
+    """Test the connection to your superset instance."""
+
+    assert superset_api is not None
+    superset_api.test_connection()
+
+
+@app.command()
+def download(
+    dst_path: Annotated[
+        Path,
+        typer.Argument(
+            file_okay=True,
+            dir_okay=True,
+            help="Destination zip or directory.",
+        ),
+    ],
+):
+    """Download all assets from server to zip or yaml directory."""
+
+    if dst_path.is_dir() and any(dst_path.iterdir()):
+        if typer.prompt(
+            f"Destination directory '{dst_path}' is not empty. Delete and re-use?",
+            type=bool,
+            default=False,
+        ):
+            shutil.rmtree(dst_path)
+        else:
+            log.info("Exiting")
+            raise typer.Exit(code=1)
+
+    assert superset_api is not None
+    superset_api.download_assets(dst_path)
+
+
+@app.command()
+def upload(
+    src_path: Annotated[
+        Path,
+        typer.Argument(
+            file_okay=True,
+            dir_okay=True,
+            exists=True,
+            help="Source zip or directory.",
+        ),
+    ],
+):
+    """Upload all assets from zip or yaml directory to server."""
+
+    assert superset_api is not None
+    superset_api.upload_assets(src_path)
