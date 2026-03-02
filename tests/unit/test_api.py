@@ -203,3 +203,108 @@ class TestUploadAssets:
             names = zf.namelist()
             assert "assets_folder/metadata.yaml" in names
             assert "assets_folder/dashboards/demo.yaml" in names
+
+
+class TestDownloadAssets:
+    @pytest.fixture
+    def client(self):
+        session = Mock()
+        session.base_url = "http://localhost:8088"
+        session.headers = {"X-CSRFToken": "csrf"}
+        return SuperSetApiClient(session)
+
+    def _zip_bytes(self, files: dict[str, str]) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            for name, content in files.items():
+                zf.writestr(name, content)
+        return buf.getvalue()
+
+    def test_download_assets_writes_zip_file(self, tmp_path, client, monkeypatch):
+        zip_bytes = self._zip_bytes(
+            {
+                "assets_export_123/metadata.yaml": "version: 1.0",
+                "assets_export_123/dashboards/demo.yaml": "dashboard_title: Demo",
+            }
+        )
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
+        monkeypatch.setattr(
+            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
+        )
+
+        out_zip = tmp_path / "out.zip"
+        client.download_assets(out_zip)
+
+        assert out_zip.exists()
+        assert out_zip.read_bytes() == zip_bytes
+
+    def test_download_assets_extracts_to_folder_and_moves_children(
+        self, tmp_path, client, monkeypatch
+    ):
+        zip_bytes = self._zip_bytes(
+            {
+                "assets_export_123/metadata.yaml": "version: 1.0",
+                "assets_export_123/dashboards/demo.yaml": "dashboard_title: Demo",
+            }
+        )
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
+        monkeypatch.setattr(
+            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
+        )
+
+        out_dir = tmp_path / "out_folder"  # no .zip suffix => folder mode
+        client.download_assets(out_dir)
+
+        assert out_dir.is_dir()
+        # children moved out of assets_export_123/ into out_dir
+        assert (out_dir / "metadata.yaml").exists()
+        assert (out_dir / "dashboards" / "demo.yaml").exists()
+
+    def test_download_assets_folder_destination_not_empty_raises(
+        self, tmp_path, client
+    ):
+        out_dir = tmp_path / "out_folder"
+        out_dir.mkdir(parents=True)
+        (out_dir / "already_there.txt").write_text("x", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="is not empty"):
+            client.download_assets(out_dir)
+
+    def test_download_assets_raises_if_no_assets_export_folder_in_zip(
+        self, tmp_path, client, monkeypatch
+    ):
+        zip_bytes = self._zip_bytes(
+            {
+                "not_assets_export/metadata.yaml": "version: 1.0",
+            }
+        )
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
+        monkeypatch.setattr(
+            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
+        )
+
+        out_dir = tmp_path / "out_folder"
+        with pytest.raises(
+            ValueError, match="Did not find a single `assets_export` folder"
+        ):
+            client.download_assets(out_dir)
+
+    def test_download_assets_raises_if_multiple_assets_export_folders_in_zip(
+        self, tmp_path, client, monkeypatch
+    ):
+        zip_bytes = self._zip_bytes(
+            {
+                "assets_export_111/metadata.yaml": "version: 1.0",
+                "assets_export_222/metadata.yaml": "version: 1.0",
+            }
+        )
+        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
+        monkeypatch.setattr(
+            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
+        )
+
+        out_dir = tmp_path / "out_folder"
+        with pytest.raises(
+            ValueError, match="Did not find a single `assets_export` folder"
+        ):
+            client.download_assets(out_dir)
