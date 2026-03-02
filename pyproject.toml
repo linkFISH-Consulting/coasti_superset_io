@@ -19,6 +19,7 @@ build-backend = "uv_build"
 dev = [
     { include-group = "lint" },
     { include-group = "typed" },
+    { include-group = "test" },
     "pre-commit>=4.5.1",
 ]
 

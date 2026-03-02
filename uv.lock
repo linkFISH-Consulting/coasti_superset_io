@@ -636,6 +636,8 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "ruff" },
     { name = "types-requests" },
 ]
@@ -662,6 +664,8 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "pre-commit", specifier = ">=4.5.1" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "ruff", specifier = ">=0.14.13" },
     { name = "types-requests", specifier = ">=2.32.4.20260107" },
 ]

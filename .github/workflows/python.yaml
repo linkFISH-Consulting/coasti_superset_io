@@ -97,8 +97,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          uv sync --all-extras
-          source .venv/bin/activate
+          uv sync --group test
       - name: Test with coverage
         run: |
           uv run pytest --cov=superset_io --cov-report xml:coverage.xml --junitxml=junit.xml -o junit_family=legacy -v
