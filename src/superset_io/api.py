@@ -8,6 +8,8 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+import requests
+
 from superset_io.session import SupersetApiSession
 from superset_io.utils import (
     validate_assets_bundle_structure,
@@ -27,13 +29,14 @@ class SuperSetApiClient:
     # ---------------------------- Public Methods ---------------------------- #
 
     def test_connection(self) -> bool:
-        """
+        """Test connection is possible.
+
         Smoke test that:
         0) We can connect via /health
         1) Bearer auth is accepted (GET /api/v1/log/)
         2) CSRF token header is accepted (POST /api/v1/assets/import/)
 
-        Raises requests.HTTPError on unexpected failures.
+        Returns true if accessible returns false if not
         """
 
         # 0) Server reachable
@@ -41,21 +44,24 @@ class SuperSetApiClient:
         try:
             res.raise_for_status()
             log.info("✅ Server is reachable.")
-        except Exception as e:
+        except requests.HTTPError as e:
             log.error(f"❌ Server not reachable: {e}")
+            log.debug(f"  {e.response.text}" if e.response else "")
+            return False
 
         # 1) Access token works
         res = self.session.get("/api/v1/log/")
         try:
             res.raise_for_status()
             log.info("✅ Access token working, can download assets.")
-        except Exception as e:
+        except requests.HTTPError as e:
             msg = "❌ Could not access API that requires bearer token"
             if res.status_code == 401:
                 msg += (
                     ". Check credentials and JWT_ALGORITHM in your superset_config.py"
                 )
             log.error(f"{msg}\n  {e}")
+            return False
 
         # 2) CSRF works: pick a POST endpoint that requires CSRF,
         # Send invalid payload so we don't create anything.
@@ -66,38 +72,30 @@ class SuperSetApiClient:
             log.error(
                 "❌ No X-CSRFToken set on session; cannot validate CSRF handling."
             )
-        else:
-            res = self.session.post(
-                "/api/v1/assets/import/",
-                json={},  # invalid; we only want to get past CSRF
-                headers={"Referer": self.session.base_url.rstrip("/") + "/"},
-            )
+            return False
 
-            if res.status_code in (400, 401, 403, 422):
-                # Heuristic: distinguish "blocked by CSRF" vs
-                # "passed CSRF but failed validation/permission"
-                body = (res.text or "").lower()
-                if "csrf" in body:
-                    log.error(
-                        f"❌  CSRF appears to be rejected: {res.status_code} {res.text}"
-                    )
-                try:
-                    error = res.json()["errors"][0]["error_type"]
-                    if error == "INVALID_PAYLOAD_FORMAT_ERROR":
-                        log.info("✅ CSRF token working, can upload assets.")
-                        return True
-                except Exception:
-                    pass
+        res = self.session.post(
+            "/api/v1/assets/import/",
+            json={},  # invalid; we only want to get past CSRF
+            headers={"Referer": self.session.base_url.rstrip("/") + "/"},
+        )
 
+        try:
+            # Anything else is unexpected
+            res.raise_for_status()
+            log.info("✅ CSRF token working, can upload assets.")
+        except requests.HTTPError as e:
             try:
-                # Anything else is unexpected
-                res.raise_for_status()
-                log.info("✅ CSRF token working, can upload assets.")
-                return True
-            except Exception as e:
+                error = res.json()["errors"][0]["error_type"]
+                if error == "INVALID_PAYLOAD_FORMAT_ERROR":
+                    log.info("✅ CSRF token working, can upload assets.")
+                else:
+                    raise ValueError("Expected INVALID_PAYLOAD_FORMAT_ERROR error!")
+            except Exception:
                 log.error(f"❌ CSRF validation failed: {e} {res.text}")
+                return False
 
-        return False
+        return True
 
     def download_assets(self, dst_path: Path):
         """Download and export all assets to disk.

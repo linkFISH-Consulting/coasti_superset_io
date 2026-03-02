@@ -5,11 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 authors = []
 requires-python = ">=3.11"
-dependencies = [
-    "requests>=2.32.5",
-    "typer>=0.21.1",
-    "python-dotenv>=1.2.1",
-]
+dependencies = ["requests>=2.32.5", "typer>=0.21.1", "python-dotenv>=1.2.1"]
 
 
 [project.scripts]
@@ -23,14 +19,17 @@ build-backend = "uv_build"
 dev = [
     { include-group = "lint" },
     { include-group = "typed" },
+    { include-group = "test" },
     "pre-commit>=4.5.1",
 ]
 
 lint = ["ruff>=0.14.13"]
+test = ["pytest>=9.0.2", "pytest-cov>=7.0.0"]
 typed = ["mypy>=1.19.1", "types-requests>=2.32.4.20260107"]
 
 [tool.ruff]
 target-version = "py311"
+include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
 
 [tool.ruff.lint]
 select = [
@@ -48,3 +47,20 @@ select = [
 check_untyped_defs = true
 disallow_untyped_decorators = true
 allow_redefinition = true
+
+[[tool.mypy.overrides]]
+# If tests/ is a package => tests.*
+# If tests are discovered as top-level modules => test_*
+module = ["tests.*"]
+disable_error_code = ["method-assign", "attr-defined"]
+
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib", "--cov=."]
+filterwarnings = ["error", "ignore::DeprecationWarning"]
+pythonpath = ["."]
+
+[tool.coverage.report]
+omit = ["*/tests/*"]
+exclude_lines = ["if TYPE_CHECKING"]
+exclude_also = ["raise NotImplementedError", "@(abc\\.)?abstractmethod"]

@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ["main"]
 
+env:
+  MAIN_PYTHON_VERSION: "3.12"
+
 jobs:
   # Get changed files and store them in outputs
   changed-files:
@@ -76,3 +79,77 @@ jobs:
       - name: Check type hints with mypy
         run: |
           uv run mypy --show-error-codes --check-untyped-defs --config-file ./pyproject.toml ./
+
+  test:
+    name: Run tests
+    runs-on: ${{ matrix.os }}
+    needs: changed-files
+    if: needs.changed-files.outputs.any_python_changed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PYTEST_ADDOPTS: "--color=yes"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv and set the Python version
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          uv sync --group test
+      - name: Validate Docker
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == env.MAIN_PYTHON_VERSION
+        run: |
+          docker info
+          docker compose version
+      - name: Start Superset stack
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == env.MAIN_PYTHON_VERSION
+        run: |
+          docker compose -f tests/integration/docker-compose.yml -p superset_test up -d
+      - name: Wait for Superset healthcheck
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == env.MAIN_PYTHON_VERSION
+        run: |
+          for i in {1..60}; do
+            if curl -fsS "http://localhost:8088/health" > /dev/null; then
+              echo "Superset is healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Superset not healthy in time"
+          docker compose -f tests/integration/docker-compose.yml -p superset_test ps
+          exit 1
+      - name: Test with coverage (unit only)
+        if: matrix.os != 'ubuntu-latest' || matrix.python-version != env.MAIN_PYTHON_VERSION
+        shell: bash
+        run: |
+          uv run pytest \
+            --cov=superset_io --cov-report xml:coverage.xml \
+            --junitxml=junit.xml -o junit_family=legacy -v
+      - name: Test with coverage (unit + integration)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == env.MAIN_PYTHON_VERSION
+        shell: bash
+        run: |
+          uv run pytest \
+            --cov=superset_io --cov-report xml:coverage.xml \
+            --junitxml=junit.xml -o junit_family=legacy -v \
+            --integration
+      - name: Tear down Superset stack
+        if: ${{ always() && matrix.os == 'ubuntu-latest' && matrix.python-version == env.MAIN_PYTHON_VERSION }}
+        run: |
+          docker compose -f tests/integration/docker-compose.yml -p superset_test down -v --remove-orphans
+
+      # OPTIONAL upload coverage (maybe interesting for future)
+      #- name: Upload coverage reports to Codecov
+      #  uses: codecov/codecov-action@v5
+      #  with:
+      #    token: ${{ secrets.CODECOV_TOKEN }}
+      #- name: Upload test results to Codecov
+      #  if: ${{ !cancelled() }}
+      #  uses: codecov/test-results-action@v1
+      #  with:
+      #    token: ${{ secrets.CODECOV_TOKEN }}

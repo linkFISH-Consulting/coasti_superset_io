@@ -67,6 +67,18 @@ Once installed, every `git commit` will trigger automatic formatting with ruff, 
 pytest
 ```
 
+Optionally you can make sure the integrations tests also running successfully. This needs
+docker compose to be installed on the system.
+
+```bash
+# Either let pytest stop start the container
+pytest --integration
+# Or do it manually
+cd ./tests/integration
+docker compose up
+pytest --integration
+```
+
 5. Commit your changes with clear messages.
 
 ```bash
