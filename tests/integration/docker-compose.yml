@@ -42,8 +42,11 @@ services:
       SUPERSET_SECRET_KEY: "test-secret-key-1234567890"
       FLASK_APP: "superset.app:create_app()"
       FLASK_ENV: development
+      SUPERSET_CONFIG_PATH: "/superset_config.py"
     volumes:
       - superset_data:/app/superset_home
+      - ../assets/people.db:/people.db
+      - ../assets/superset_config.py:/superset_config.py
     command: >
       bash -c "
         superset db upgrade &&
