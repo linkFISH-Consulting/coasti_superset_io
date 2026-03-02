@@ -2,8 +2,11 @@
 Unit tests for the Superset API client.
 """
 
+import io
+import zipfile
 from unittest.mock import Mock
 
+import pytest
 import requests
 
 from superset_io.api import SuperSetApiClient
@@ -145,3 +148,58 @@ class TestAPITestConnection:
             json={},
             headers={"Referer": "http://localhost:8088/"},
         )
+
+
+class TestUploadAssets:
+    @pytest.fixture
+    def asset_folder(self, tmp_path):
+        assets_root = tmp_path / "assets_folder"
+        (assets_root / "dashboards").mkdir(parents=True)
+
+        (assets_root / "metadata.yaml").write_text("version: 1.0", encoding="utf-8")
+        (assets_root / "dashboards" / "demo.yaml").write_text(
+            "dashboard_title: Demo", encoding="utf-8"
+        )
+        yield assets_root
+
+    @pytest.fixture
+    def client(self):
+        session = Mock()
+        session.base_url = "http://localhost:8088"
+        session.headers = {"X-CSRFToken": "csrf"}
+        return SuperSetApiClient(session)
+
+    def test_upload_assets_zip(self, tmp_path, asset_folder, client, monkeypatch):
+        # Create a real zip on disk from the fixture folder contents
+        zip_path = tmp_path / "assets_bundle.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for p in asset_folder.rglob("*"):
+                if p.is_file():
+                    zf.write(p, arcname=p.relative_to(asset_folder.parent).as_posix())
+
+        post_mock = Mock()
+        monkeypatch.setattr(client, "_post_assets", post_mock)
+
+        client.upload_assets(zip_path)
+
+        post_mock.assert_called_once()
+        buf = post_mock.call_args.kwargs["zipfile_buffer"]
+
+        assert isinstance(buf, io.BytesIO)
+        assert buf.getvalue() == zip_path.read_bytes()
+
+    def test_upload_assets_folder(self, asset_folder, client, monkeypatch):
+        post_mock = Mock()
+        monkeypatch.setattr(client, "_post_assets", post_mock)
+
+        client.upload_assets(asset_folder)
+
+        post_mock.assert_called_once()
+        buf = post_mock.call_args.kwargs["zipfile_buffer"]
+
+        assert isinstance(buf, io.BytesIO)
+        # ensure zipped structure contains expected files
+        with zipfile.ZipFile(buf, "r") as zf:
+            names = zf.namelist()
+            assert "assets_folder/metadata.yaml" in names
+            assert "assets_folder/dashboards/demo.yaml" in names
