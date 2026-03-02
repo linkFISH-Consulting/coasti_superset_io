@@ -37,13 +37,6 @@ class SupersetApiSession(requests.Session):
 
         self.headers.update(headers)
 
-    def _get_domain(self, url: str) -> str:
-        """Extract domain from URL for cookie setting."""
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url)
-        return parsed.hostname or ""
-
     def request(self, method: str | bytes, url: str | bytes, *args, **kwargs):
         if isinstance(url, str) and not url.startswith("http"):
             url = f"{self.base_url}{url}"
@@ -117,7 +110,7 @@ class SupersetApiSession(requests.Session):
 
         res.raise_for_status()
 
-        token = res.json().get("access_token")
+        token: str = res.json()["access_token"]
         log.debug(f"access token algorithm {self._jwt_header(token)}")
 
         return token
@@ -125,7 +118,10 @@ class SupersetApiSession(requests.Session):
     def _get_csrf_via_bearer(self) -> str:
         log.debug("Obtaining csrf token via bearer")
         res = self.get("/api/v1/security/csrf_token/")
-        if not res.ok:
+
+        try:
+            res.raise_for_status()
+        except requests.HTTPError:
             if (
                 res.status_code == 422
                 and "The specified alg value is not allowed" in res.text
@@ -136,8 +132,7 @@ class SupersetApiSession(requests.Session):
                     "Fix server config (e.g., JWT_ALGORITHM/allowed algorithms) "
                     "or use cookie/session auth."
                 )
-
-            res.raise_for_status()
+            raise
 
         return res.json()["result"]
 
@@ -151,13 +146,8 @@ class SupersetApiSession(requests.Session):
         log.debug("Obtaining csrf token via session cookie")
         res = self.get("/login/")
         res.raise_for_status()
-
-        match = re.search(
-            r'name="csrf_token"\s+type="hidden"\s+value="([^"]+)"', res.text
-        )
-        if match:
-            csrf = match.group(1)
-        else:
+        csrf = self._extract_csrf_from_login_html(res.text)
+        if not csrf:
             raise RuntimeError(
                 "Could not find csrf_token field on /login/ page. "
                 "Cookie-based login fallback may not be supported/enabled."
@@ -199,4 +189,9 @@ class SupersetApiSession(requests.Session):
         PS: not verified.
         """
 
-        return None
+        match = re.search(r'name="csrf_token"\s+type="hidden"\s+value="([^"]+)"', html)
+        csrf: str | None = None
+        if match:
+            csrf = match.group(1)
+
+        return csrf
