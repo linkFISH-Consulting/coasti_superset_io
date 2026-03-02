@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from superset_io.session import SupersetApiSession
+from superset_io.api.session import SupersetApiSession
 
 
 @pytest.fixture

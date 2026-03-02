@@ -73,7 +73,7 @@ def superset_instance(
 @pytest.fixture
 def superset_client(superset_instance: SupersetInstance) -> SupersetApiClient:
     from superset_io.api import SupersetApiClient
-    from superset_io.session import SupersetApiSession
+    from superset_io.api.session import SupersetApiSession
 
     session = SupersetApiSession.from_credentials(
         superset_instance.url, superset_instance.user, superset_instance.password

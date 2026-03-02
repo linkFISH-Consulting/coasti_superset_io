@@ -2,10 +2,9 @@ import logging
 
 import requests
 
-from superset_io.session import SupersetApiSession
-
 from .assets import AssetsApiClient
 from .dashboards import DashboardApiClient
+from .session import SupersetApiSession
 
 log = logging.getLogger("superset_io")
 
