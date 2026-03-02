@@ -29,7 +29,7 @@ typed = ["mypy>=1.19.1", "types-requests>=2.32.4.20260107"]
 
 [tool.ruff]
 target-version = "py311"
-include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
+include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py", "docs/**/*"]
 
 [tool.ruff.lint]
 select = [

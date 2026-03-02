@@ -10,11 +10,11 @@ from dotenv import load_dotenv
 
 from superset_io.utils import get_version
 
-from .api import SuperSetApiClient, SupersetApiSession
+from .api import SupersetApiClient, SupersetApiSession
 
 log = logging.getLogger("superset_io")
 logging.basicConfig(level="INFO")
-superset_api: SuperSetApiClient | None = None
+superset_api: SupersetApiClient | None = None
 
 
 app = typer.Typer()
@@ -110,7 +110,7 @@ def authenticate(
             bearer_token=access_token,
         )
 
-    superset_api = SuperSetApiClient(session)
+    superset_api = SupersetApiClient(session)
 
 
 @app.command()
@@ -159,7 +159,7 @@ def download(
             raise typer.Exit(code=1)
 
     assert superset_api is not None
-    superset_api.download_assets(dst_path)
+    superset_api.assets.download(dst_path)
 
 
 @app.command()
@@ -177,4 +177,4 @@ def upload(
     """Upload all assets from zip or yaml directory to server."""
 
     assert superset_api is not None
-    superset_api.upload_assets(src_path)
+    superset_api.assets.upload(src_path)

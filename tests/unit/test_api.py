@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from superset_io.api import SuperSetApiClient
+from superset_io.api import SupersetApiClient
 
 
 def _resp(*, status_code=200, text="", json_data=None, raise_exc=None):
@@ -33,7 +33,7 @@ def _http_error(msg="http error", *, response_text=""):
 
 
 class TestAPITestConnection:
-    """Lean unit tests for request-building logic in SuperSetApiClient."""
+    """Lean unit tests for request-building logic in SupersetApiClient."""
 
     def test_connection_health_fails(self):
         session = Mock()
@@ -47,7 +47,7 @@ class TestAPITestConnection:
         )
         session.post = Mock()
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is False
 
         session.get.assert_called_once_with("/health")
@@ -68,7 +68,7 @@ class TestAPITestConnection:
         )
         session.post = Mock()
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is False
 
         assert session.get.call_args_list[0].args[0] == "/health"
@@ -83,7 +83,7 @@ class TestAPITestConnection:
         session.get = Mock(side_effect=[_resp(), _resp()])
         session.post = Mock()
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is False
 
         session.post.assert_not_called()
@@ -103,7 +103,7 @@ class TestAPITestConnection:
         )
         session.post = Mock(return_value=post_res)
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is True
 
     def test_connection_error_type_not_expected(self):
@@ -125,7 +125,7 @@ class TestAPITestConnection:
         )
         session.post = Mock(return_value=post_res)
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
 
         # If your current code has the `e` NameError, this will raise.
         # Once code is fixed, it should simply be False.
@@ -140,7 +140,7 @@ class TestAPITestConnection:
         session.get = Mock(side_effect=[_resp(), _resp()])
         session.post = Mock(return_value=_resp(status_code=200))
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is True
 
         session.post.assert_called_once_with(
@@ -167,7 +167,7 @@ class TestUploadAssets:
         session = Mock()
         session.base_url = "http://localhost:8088"
         session.headers = {"X-CSRFToken": "csrf"}
-        return SuperSetApiClient(session)
+        return SupersetApiClient(session)
 
     def test_upload_assets_zip(self, tmp_path, asset_folder, client, monkeypatch):
         # Create a real zip on disk from the fixture folder contents
@@ -211,7 +211,7 @@ class TestDownloadAssets:
         session = Mock()
         session.base_url = "http://localhost:8088"
         session.headers = {"X-CSRFToken": "csrf"}
-        return SuperSetApiClient(session)
+        return SupersetApiClient(session)
 
     def _zip_bytes(self, files: dict[str, str]) -> bytes:
         buf = io.BytesIO()
