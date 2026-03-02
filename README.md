@@ -67,6 +67,12 @@ Once installed, every `git commit` will trigger automatic formatting with ruff, 
 pytest
 ```
 
+Optionally you can make sure the integrations tests also running successfully:
+
+```bash
+pytest --integration
+```
+
 5. Commit your changes with clear messages.
 
 ```bash
