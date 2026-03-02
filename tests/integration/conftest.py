@@ -66,7 +66,8 @@ def superset_instance(
         yield instance
     finally:
         if isinstance(instance, SupersetDockerComposeInstance):
-            instance.stop()
+            if not instance.was_running:
+                instance.stop()
 
 
 @pytest.fixture

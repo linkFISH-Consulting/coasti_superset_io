@@ -25,9 +25,13 @@ class SupersetInstance:
 class SupersetDockerComposeInstance(SupersetInstance):
     """Managed superset docker stack"""
 
+    # If docker compose stack was running before?
+    was_running: bool
+
     def __init__(self, compose_file: Path, project_name="superset_test") -> None:
         self.compose_file = compose_file
         self.project_name = project_name
+        self.was_running = False
         super().__init__("http://localhost:8088", "admin", "admin")
 
     def _compose_base_cmd(self) -> list[str]:
@@ -75,13 +79,15 @@ class SupersetDockerComposeInstance(SupersetInstance):
     def start(self, timeout: int = 120):
         """Start the docker-compose stack and wait for Superset to be ready."""
         if not self._is_compose_stack_running():
-            print("Starting docker container...")
+            self.was_running = False
             cmd = [
                 *self._compose_base_cmd(),
                 "up",
                 "-d",
             ]
             subprocess.run(cmd, check=True, capture_output=True)
+        else:
+            self.was_running = True
 
         # Wait for Superset health check
         start_time = time.time()
