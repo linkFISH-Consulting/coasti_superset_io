@@ -9,7 +9,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 
-from superset_io.api import SuperSetApiClient
+from superset_io.api import SupersetApiClient
 
 
 def _resp(*, status_code=200, text="", json_data=None, raise_exc=None):
@@ -33,7 +33,7 @@ def _http_error(msg="http error", *, response_text=""):
 
 
 class TestAPITestConnection:
-    """Lean unit tests for request-building logic in SuperSetApiClient."""
+    """Lean unit tests for request-building logic in SupersetApiClient."""
 
     def test_connection_health_fails(self):
         session = Mock()
@@ -47,7 +47,7 @@ class TestAPITestConnection:
         )
         session.post = Mock()
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is False
 
         session.get.assert_called_once_with("/health")
@@ -68,7 +68,7 @@ class TestAPITestConnection:
         )
         session.post = Mock()
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is False
 
         assert session.get.call_args_list[0].args[0] == "/health"
@@ -83,7 +83,7 @@ class TestAPITestConnection:
         session.get = Mock(side_effect=[_resp(), _resp()])
         session.post = Mock()
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is False
 
         session.post.assert_not_called()
@@ -103,7 +103,7 @@ class TestAPITestConnection:
         )
         session.post = Mock(return_value=post_res)
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is True
 
     def test_connection_error_type_not_expected(self):
@@ -125,7 +125,7 @@ class TestAPITestConnection:
         )
         session.post = Mock(return_value=post_res)
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
 
         # If your current code has the `e` NameError, this will raise.
         # Once code is fixed, it should simply be False.
@@ -140,7 +140,7 @@ class TestAPITestConnection:
         session.get = Mock(side_effect=[_resp(), _resp()])
         session.post = Mock(return_value=_resp(status_code=200))
 
-        client = SuperSetApiClient(session)
+        client = SupersetApiClient(session)
         assert client.test_connection() is True
 
         session.post.assert_called_once_with(
@@ -167,9 +167,11 @@ class TestUploadAssets:
         session = Mock()
         session.base_url = "http://localhost:8088"
         session.headers = {"X-CSRFToken": "csrf"}
-        return SuperSetApiClient(session)
+        return SupersetApiClient(session)
 
-    def test_upload_assets_zip(self, tmp_path, asset_folder, client, monkeypatch):
+    def test_upload_assets_zip(
+        self, tmp_path, asset_folder, client: SupersetApiClient, monkeypatch
+    ):
         # Create a real zip on disk from the fixture folder contents
         zip_path = tmp_path / "assets_bundle.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
@@ -178,9 +180,9 @@ class TestUploadAssets:
                     zf.write(p, arcname=p.relative_to(asset_folder.parent).as_posix())
 
         post_mock = Mock()
-        monkeypatch.setattr(client, "_post_assets", post_mock)
+        monkeypatch.setattr(client.assets, "_import", post_mock)
 
-        client.upload_assets(zip_path)
+        client.assets.upload(zip_path)
 
         post_mock.assert_called_once()
         buf = post_mock.call_args.kwargs["zipfile_buffer"]
@@ -188,11 +190,13 @@ class TestUploadAssets:
         assert isinstance(buf, io.BytesIO)
         assert buf.getvalue() == zip_path.read_bytes()
 
-    def test_upload_assets_folder(self, asset_folder, client, monkeypatch):
+    def test_upload_assets_folder(
+        self, asset_folder, client: SupersetApiClient, monkeypatch
+    ):
         post_mock = Mock()
-        monkeypatch.setattr(client, "_post_assets", post_mock)
+        monkeypatch.setattr(client.assets, "_import", post_mock)
 
-        client.upload_assets(asset_folder)
+        client.assets.upload(asset_folder)
 
         post_mock.assert_called_once()
         buf = post_mock.call_args.kwargs["zipfile_buffer"]
@@ -211,49 +215,48 @@ class TestDownloadAssets:
         session = Mock()
         session.base_url = "http://localhost:8088"
         session.headers = {"X-CSRFToken": "csrf"}
-        return SuperSetApiClient(session)
+        return SupersetApiClient(session)
 
-    def _zip_bytes(self, files: dict[str, str]) -> bytes:
+    def _zip_response_mock(self, files: dict[str, str]) -> requests.Response:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             for name, content in files.items():
                 zf.writestr(name, content)
-        return buf.getvalue()
+        zip_bytes = buf.getvalue()
+        res = Mock()
+        res.content = zip_bytes
+        return res
 
-    def test_download_assets_writes_zip_file(self, tmp_path, client, monkeypatch):
-        zip_bytes = self._zip_bytes(
+    def test_download_assets_writes_zip_file(
+        self, tmp_path, client: SupersetApiClient, monkeypatch
+    ):
+        res_mock = self._zip_response_mock(
             {
                 "assets_export_123/metadata.yaml": "version: 1.0",
                 "assets_export_123/dashboards/demo.yaml": "dashboard_title: Demo",
             }
         )
-        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
-        monkeypatch.setattr(
-            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
-        )
+        monkeypatch.setattr(client.assets, "_export", Mock(return_value=res_mock))
 
         out_zip = tmp_path / "out.zip"
-        client.download_assets(out_zip)
+        client.assets.download(out_zip)
 
         assert out_zip.exists()
-        assert out_zip.read_bytes() == zip_bytes
+        assert out_zip.read_bytes() == res_mock.content
 
     def test_download_assets_extracts_to_folder_and_moves_children(
-        self, tmp_path, client, monkeypatch
+        self, tmp_path, client: SupersetApiClient, monkeypatch
     ):
-        zip_bytes = self._zip_bytes(
+        res_mock = self._zip_response_mock(
             {
                 "assets_export_123/metadata.yaml": "version: 1.0",
                 "assets_export_123/dashboards/demo.yaml": "dashboard_title: Demo",
             }
         )
-        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
-        monkeypatch.setattr(
-            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
-        )
+        monkeypatch.setattr(client.assets, "_export", Mock(return_value=res_mock))
 
         out_dir = tmp_path / "out_folder"  # no .zip suffix => folder mode
-        client.download_assets(out_dir)
+        client.assets.download(out_dir)
 
         assert out_dir.is_dir()
         # children moved out of assets_export_123/ into out_dir
@@ -261,50 +264,44 @@ class TestDownloadAssets:
         assert (out_dir / "dashboards" / "demo.yaml").exists()
 
     def test_download_assets_folder_destination_not_empty_raises(
-        self, tmp_path, client
+        self, tmp_path, client: SupersetApiClient
     ):
         out_dir = tmp_path / "out_folder"
         out_dir.mkdir(parents=True)
         (out_dir / "already_there.txt").write_text("x", encoding="utf-8")
 
         with pytest.raises(ValueError, match="is not empty"):
-            client.download_assets(out_dir)
+            client.assets.download(out_dir)
 
     def test_download_assets_raises_if_no_assets_export_folder_in_zip(
-        self, tmp_path, client, monkeypatch
+        self, tmp_path, client: SupersetApiClient, monkeypatch
     ):
-        zip_bytes = self._zip_bytes(
+        res_mock = self._zip_response_mock(
             {
                 "not_assets_export/metadata.yaml": "version: 1.0",
             }
         )
-        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
-        monkeypatch.setattr(
-            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
-        )
+        monkeypatch.setattr(client.assets, "_export", Mock(return_value=res_mock))
 
         out_dir = tmp_path / "out_folder"
         with pytest.raises(
             ValueError, match="Did not find a single `assets_export` folder"
         ):
-            client.download_assets(out_dir)
+            client.assets.download(out_dir)
 
     def test_download_assets_raises_if_multiple_assets_export_folders_in_zip(
-        self, tmp_path, client, monkeypatch
+        self, tmp_path, client: SupersetApiClient, monkeypatch
     ):
-        zip_bytes = self._zip_bytes(
+        res_mock = self._zip_response_mock(
             {
                 "assets_export_111/metadata.yaml": "version: 1.0",
                 "assets_export_222/metadata.yaml": "version: 1.0",
             }
         )
-        zip_file = zipfile.ZipFile(io.BytesIO(zip_bytes), "r")
-        monkeypatch.setattr(
-            client, "_get_assets_zip", Mock(return_value=(zip_bytes, zip_file))
-        )
+        monkeypatch.setattr(client.assets, "_export", Mock(return_value=res_mock))
 
         out_dir = tmp_path / "out_folder"
         with pytest.raises(
             ValueError, match="Did not find a single `assets_export` folder"
         ):
-            client.download_assets(out_dir)
+            client.assets.download(out_dir)
