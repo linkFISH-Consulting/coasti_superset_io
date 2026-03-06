@@ -4,24 +4,25 @@ import shutil
 from pathlib import Path
 from typing import Annotated
 
+import requests
 import typer
 from dotenv import load_dotenv
 
 from superset_io.api import SupersetApiClient, SupersetApiSession
 from superset_io.utils import get_version
 
+from .utils import Context, catch_exception
+
 # Load env vars also from .env
 load_dotenv()
 
 log = logging.getLogger("superset_io")
 logging.basicConfig(level="INFO")
-
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(
+    no_args_is_help=True,
+    pretty_exceptions_show_locals=False,
+)
 # app.add_typer(explore_app)
-
-
-class Context(typer.Context):
-    obj: SupersetApiClient
 
 
 @app.callback()
@@ -75,6 +76,10 @@ def main(
         )
 
 
+@catch_exception(
+    exception=requests.ConnectionError,
+    exit_code=1,
+)
 def authenticate(
     base_url: str,
     username: str | None = None,
@@ -101,7 +106,8 @@ def authenticate(
         session = SupersetApiSession.from_credentials(
             base_url=base_url,
             username=user,
-            password=password or typer.prompt("Password", type=str, hide_input=True),
+            password=password
+            or typer.prompt("Password", type=str, hide_input=True, default="admin"),
         )
     else:
         log.debug("Authenticating using access token")
@@ -127,11 +133,14 @@ def version():
 
 
 @app.command()
+@catch_exception(
+    exception=requests.ConnectionError,
+    exit_code=1,
+)
 def test(
     ctx: Context,
 ):
     """Test the connection to configured superset instance."""
-
     ctx.obj.test_connection()
 
 
