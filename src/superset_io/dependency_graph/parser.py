@@ -172,16 +172,15 @@ class AssetsParser:
         if theme_uuid := self.__parse_uuid(dashboard.get("theme_uuid")):
             dependencies.add(Asset(uuid=theme_uuid, type=AssetType.THEME))
 
-        dependents = set()
         for position in dashboard.get("position", {}).values():
             if not isinstance(position, dict):
                 continue
             if position.get("type") == "CHART" and (
                 chart_uuid := position.get("meta", {}).get("uuid")
             ):
-                dependents.add(Asset(chart_uuid, type=AssetType.CHART))
+                dependencies.add(Asset(chart_uuid, type=AssetType.CHART))
 
-        return dashboard_asset, dependencies, dependents
+        return dashboard_asset, dependencies, set()
 
     def _parse_database(
         self, path: Path
