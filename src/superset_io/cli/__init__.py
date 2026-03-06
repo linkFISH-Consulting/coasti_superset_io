@@ -7,9 +7,8 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
+from superset_io.api import SupersetApiClient, SupersetApiSession
 from superset_io.utils import get_version
-
-from .api import SupersetApiClient, SupersetApiSession
 
 # Load env vars also from .env
 load_dotenv()
@@ -17,13 +16,17 @@ load_dotenv()
 log = logging.getLogger("superset_io")
 logging.basicConfig(level="INFO")
 
-superset_api: SupersetApiClient | None = None
-
 app = typer.Typer(no_args_is_help=True)
+# app.add_typer(explore_app)
+
+
+class Context(typer.Context):
+    obj: SupersetApiClient
 
 
 @app.callback()
 def main(
+    ctx: Context,
     base_url: Annotated[
         str,
         typer.Option(
@@ -63,13 +66,13 @@ def main(
 
     © coasti
     """
-
-    authenticate(
-        base_url,
-        username,
-        password,
-        access_token,
-    )
+    if not ctx.obj:
+        authenticate(
+            base_url,
+            username,
+            password,
+            access_token,
+        )
 
 
 def authenticate(
@@ -77,7 +80,7 @@ def authenticate(
     username: str | None = None,
     password: str | None = None,
     access_token: str | None = None,
-):
+) -> SupersetApiClient:
     """
     Initialize the global superset_api by asking users to input their credentials.
 
@@ -86,12 +89,6 @@ def authenticate(
     helpful:
     https://stackoverflow.com/questions/68646596/how-to-get-superset-token-for-use-rest-api
     """
-
-    global superset_api
-
-    if superset_api is not None:
-        log.debug("Using existing authenticated session")
-        return
 
     log.info(f"Connecting to Superset at: {base_url}")
 
@@ -113,7 +110,7 @@ def authenticate(
             bearer_token=access_token,
         )
 
-    superset_api = SupersetApiClient(session)
+    return SupersetApiClient(session)
 
 
 @app.command()
@@ -130,15 +127,17 @@ def version():
 
 
 @app.command()
-def test():
+def test(
+    ctx: Context,
+):
     """Test the connection to configured superset instance."""
 
-    assert superset_api is not None
-    superset_api.test_connection()
+    ctx.obj.test_connection()
 
 
 @app.command()
 def download(
+    ctx: Context,
     dst_path: Annotated[
         Path,
         typer.Argument(
@@ -161,12 +160,12 @@ def download(
             log.info("Exiting")
             raise typer.Exit(code=1)
 
-    assert superset_api is not None
-    superset_api.assets.download(dst_path)
+    ctx.obj.assets.download(dst_path)
 
 
 @app.command()
 def upload(
+    ctx: Context,
     src_path: Annotated[
         Path,
         typer.Argument(
@@ -179,5 +178,4 @@ def upload(
 ):
     """Upload all assets from zip or yaml directory to server."""
 
-    assert superset_api is not None
-    superset_api.assets.upload(src_path)
+    ctx.obj.assets.upload(src_path)
