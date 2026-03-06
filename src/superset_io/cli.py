@@ -1,9 +1,8 @@
-# access_token
 import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 from dotenv import load_dotenv
@@ -12,39 +11,59 @@ from superset_io.utils import get_version
 
 from .api import SupersetApiClient, SupersetApiSession
 
+# Load env vars also from .env
+load_dotenv()
+
 log = logging.getLogger("superset_io")
 logging.basicConfig(level="INFO")
+
 superset_api: SupersetApiClient | None = None
 
-
-app = typer.Typer()
+app = typer.Typer(no_args_is_help=True)
 
 
 @app.callback()
 def main(
     base_url: Annotated[
-        str | None, typer.Option(help="Default: from env var $SUPERSET_BASE_URL")
-    ] = None,
+        str,
+        typer.Option(
+            help="Base URL for Superset instance",
+            envvar="SUPERSET_BASE_URL",
+        ),
+    ] = "http://localhost:8088",
     username: Annotated[
-        str | None, typer.Option(help="Default: from env var $SUPERSET_USER")
-    ] = None,
+        str,
+        typer.Option(
+            help="Username for Superset user",
+            envvar="SUPERSET_USER",
+        ),
+    ] = "admin",
     password: Annotated[
         str | None,
         typer.Option(
-            help="Default: from env var $SUPERSET_PASSWORD_FILE", hide_input=True
+            help="Password for Superset user",
+            envvar="SUPERSET_PASSWORD_FILE",
+            hide_input=True,
         ),
     ] = None,
     access_token: Annotated[
         str | None,
         typer.Option(
-            help="Default: from env var $SUPERSET_ACCESS_TOKEN", hide_input=True
+            help="Access token as alternative to user and password",
+            hide_input=True,
+            envvar="SUPERSET_ACCESS_TOKEN",
         ),
     ] = None,
 ):
+    r"""
+    Superset-IO
+
+    Automate import, export, and exploration of Superset assets
+    via the Superset REST API.
+
+    © coasti
     """
-    Superset-IO — Automate import and export of content via superset's REST API
-    """
-    load_dotenv()
+
     authenticate(
         base_url,
         username,
@@ -54,7 +73,7 @@ def main(
 
 
 def authenticate(
-    base_url: str | None = None,
+    base_url: str,
     username: str | None = None,
     password: str | None = None,
     access_token: str | None = None,
@@ -69,42 +88,26 @@ def authenticate(
     """
 
     global superset_api
+
     if superset_api is not None:
+        log.debug("Using existing authenticated session")
         return
 
-    if base_url is None:
-        base_url = os.environ.get("SUPERSET_BASE_URL") or typer.prompt(
-            "Base URL", type=str, default="http://localhost:8088"
-        )
-        base_url = cast(str, base_url)
+    log.info(f"Connecting to Superset at: {base_url}")
 
     if access_token is None:
-        access_token = os.environ.get("SUPERSET_ACCESS_TOKEN", None)
-    if access_token is None:
-        if username is None:
-            username = os.environ.get("SUPERSET_USER") or typer.prompt(
-                "Username", type=str
-            )
-            username = cast(str, username)
-
-        if password is None:
-            password = os.environ.get("SUPERSET_PASSWORD")
-        if password is None and (
-            password_file := os.environ.get("SUPERSET_PASSWORD_FILE", "")
-        ):
+        if password_file := os.environ.get("SUPERSET_PASSWORD_FILE", ""):
             password = Path(password_file).read_text().rstrip()
-        if password is None:
-            password = typer.prompt("Password", type=str, hide_input=True)
-            password = cast(str, password)
 
-        log.debug("Acquiring access token")
+        user: str = username or typer.prompt("Username", type=str)
+        log.info(f"Connecting to Superset as: {user}")
         session = SupersetApiSession.from_credentials(
             base_url=base_url,
-            username=username,
-            password=password,
+            username=user,
+            password=password or typer.prompt("Password", type=str, hide_input=True),
         )
     else:
-        log.debug("Using provided access token")
+        log.debug("Authenticating using access token")
         session = SupersetApiSession.from_token(
             base_url=base_url,
             bearer_token=access_token,
@@ -128,7 +131,7 @@ def version():
 
 @app.command()
 def test():
-    """Test the connection to your superset instance."""
+    """Test the connection to configured superset instance."""
 
     assert superset_api is not None
     superset_api.test_connection()
