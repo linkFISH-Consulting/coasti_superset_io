@@ -6,7 +6,8 @@ import typer
 from prompt_toolkit.shortcuts import choice
 
 from superset_io.dependency_graph import Asset, AssetsParser, AssetType, DependencyGraph
-from superset_io.dependency_graph.repr import print_dep_tree_rich
+from superset_io.dependency_graph.assets import AssetData
+from superset_io.dependency_graph.repr import print_dep_tree_rich, rich_label
 
 explore_app = typer.Typer(
     no_args_is_help=True,
@@ -15,7 +16,7 @@ explore_app = typer.Typer(
 
 
 class Context(typer.Context):
-    obj: DependencyGraph
+    obj: AssetsParser
 
 
 @explore_app.callback()
@@ -30,20 +31,31 @@ def load_assets(
         ),
     ],
 ):
-    ctx.obj = AssetsParser()(dst_path)
+    parser = AssetsParser(dst_path)
+    ctx.obj = parser
+    parser.parse()
 
 
 @explore_app.command(name="list")
-def list_(ctx: Context):
+def list_(
+    ctx: Context,
+    uuids: Annotated[bool, typer.Option(help="Whether to show UUIDs.")] = False,
+):
     """List assets from a downloaded assets folder or zip."""
+    graph = ctx.obj.graph
+    registry = ctx.obj.asset_registry
+
     grouped: dict[AssetType, set[Asset]] = defaultdict(set)
-    for asset in ctx.obj.assets:
+    for asset in graph.assets:
         grouped[asset.type].add(asset)
 
     for asset_type, assets in grouped.items():
         print(f"{asset_type.name}:")
         for asset in assets:
-            print(f"\t{asset.uuid}")
+            if uuids:
+                print(f"  {registry[asset].name} ({asset.uuid})")
+            else:
+                print(f"  {registry[asset].name}")
 
 
 @explore_app.command()
@@ -56,9 +68,14 @@ def graph(
     direction: Annotated[
         Literal["upstream", "downstream"] | None, typer.Option(help="")
     ] = None,
+    uuids: Annotated[bool, typer.Option(help="Whether to show UUIDs.")] = False,
 ):
     """Dependency graph of a specific asset."""
-    asset_ = prompt_for_asset(ctx.obj, asset)
+    asset_ = prompt_for_asset(
+        ctx.obj.graph,
+        ctx.obj.asset_registry,
+        asset,
+    )
 
     if direction is None:
         direction = choice(
@@ -71,14 +88,16 @@ def graph(
         )
 
     print_dep_tree_rich(
-        ctx.obj,
+        ctx.obj.graph,
         root=asset_,
+        label=lambda a: rich_label(a, ctx.obj.asset_registry, uuids),
         direction=direction,  # type: ignore[arg-type]
     )
 
 
 def prompt_for_asset(
     g: DependencyGraph,
+    registry: dict[Asset, AssetData],
     asset: str | None = None,
 ) -> Asset:
     # Prompt for assets
@@ -96,7 +115,7 @@ def prompt_for_asset(
 
         return choice(
             message=f" {asset_type.name.lower().capitalize()}s:",
-            options=[(a, str(a.uuid)) for a in assets],
+            options=[(a, registry[a].name) for a in assets],
             default=assets[0],
         )
     else:

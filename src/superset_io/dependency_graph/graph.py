@@ -147,7 +147,10 @@ class DependencyGraph:
 
         None if not in graph
         """
+        if isinstance(asset, str):
+            asset = UUID(asset)
+
         for a in self.assets:
-            if a == asset:
+            if a.uuid == asset:
                 return a
         return None

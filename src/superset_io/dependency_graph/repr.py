@@ -15,7 +15,7 @@ from rich.text import Text
 from rich.theme import Theme
 from rich.tree import Tree
 
-from .assets import Asset, AssetType
+from .assets import Asset, AssetData, AssetType
 from .graph import DependencyGraph
 
 __all__ = [
@@ -33,6 +33,7 @@ ASSET_THEME = Theme(
         "asset.sep": "dim",
         "asset.uuid": "white",
         "asset.ref": "dim italic",
+        "asset.name": "bold white",
         "tree.guide": "grey50",
     }
 )
@@ -96,12 +97,23 @@ def color_for_asset(a: Asset, *, base_hex: dict[AssetType, str] = BASE_HEX) -> s
     return _rgb01_to_hex((rr, gg, bb))
 
 
-def rich_label(a: Asset) -> Text:
+def rich_label(
+    a: Asset, registry: dict[Asset, AssetData] | None = None, uuids: bool = False
+) -> Text:
+    """Create a Rich Text label for an asset, with color and optional UUID."""
     c = color_for_asset(a)
-    return Text.assemble(
+    text_parts = [
         (a.type.name, f"bold {c}"),
         (":", "asset.sep"),
-        (str(a.uuid)[:8], "asset.uuid"),
+    ]
+    if registry and a in registry:
+        text_parts.append((registry[a].name, "asset.name"))
+        if uuids:
+            text_parts.append((f" ({a.uuid})", "asset.uuid"))
+    else:
+        text_parts.append((str(a.uuid), "asset.uuid"))
+    return Text.assemble(
+        *text_parts,
     )
 
 

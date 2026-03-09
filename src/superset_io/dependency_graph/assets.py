@@ -45,3 +45,10 @@ class Asset:
         elif isinstance(other, str):
             return self.uuid.__str__() == other
         return False
+
+
+@dataclass(frozen=True, slots=True)
+class AssetData:
+    """Additional data of an asset."""
+
+    name: str

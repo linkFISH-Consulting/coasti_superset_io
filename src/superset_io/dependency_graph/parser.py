@@ -6,12 +6,12 @@ from concurrent.futures import (
     as_completed,
 )
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 import yaml
 
-from .assets import Asset, AssetType
+from .assets import Asset, AssetData, AssetType
 from .graph import DependencyGraph
 
 log = logging.getLogger("superset_io")
@@ -30,26 +30,48 @@ class ParserError(Exception):
         super().__init__(" | ".join(parts))
 
 
+class _AssetChunk(NamedTuple):
+    """Parser metadata for an asset, used in the parsing process."""
+
+    asset: Asset
+    dependencies: set[Asset]
+    dependents: set[Asset]
+    registry: dict[Asset, AssetData]
+
+
 class AssetsParser:
-    """Parses an Superset Assets folder"""
+    """Parses an Superset Assets folder into a graph
+    or dependencies and a metadata lookup.
+    """
 
     executor: type[ProcessPoolExecutor | ThreadPoolExecutor] | None
+    folder: Path
 
-    def __init__(self) -> None:
+    def __init__(self, folder: Path) -> None:
         self.executor = ProcessPoolExecutor
+        self.folder = folder.expanduser().resolve()
 
-    def __call__(self, folder: Path) -> DependencyGraph:
+    _graph: DependencyGraph | None = None
+    # The parsed graph (once parsed)
+
+    _asset_registry: dict[Asset, AssetData] | None = None
+    # Metadata of each asset (once parsed)
+
+    def parse(self, overwrite: bool = False):
         """Parse an assets folder into one dependency graphs."""
 
-        folder = folder.expanduser().resolve()
+        if (
+            self._graph is not None and self._asset_registry is not None
+        ) and not overwrite:
+            raise ValueError("Already parsed. Set overwrite=True to re-parse.")
 
-        if not folder.exists():
-            raise FileNotFoundError(f"Assets folder does not exist: {folder}")
-        if not folder.is_dir():
-            raise NotADirectoryError(f"Assets folder is not a directory: {folder}")
+        if not self.folder.exists():
+            raise FileNotFoundError(f"Assets folder does not exist: {self.folder}")
+        if not self.folder.is_dir():
+            raise NotADirectoryError(f"Assets folder is not a directory: {self.folder}")
 
         # Check has metadata.yaml and type=assets
-        metadata_file = folder / "metadata.yaml"
+        metadata_file = self.folder / "metadata.yaml"
         if not metadata_file.exists():
             raise FileNotFoundError(
                 f"Missing metadata.yaml in assets folder: {metadata_file}"
@@ -63,7 +85,19 @@ class AssetsParser:
             )
 
         # Parse
-        return self._parse(folder)
+        self._graph, self._asset_registry = self._parse(self.folder)
+
+    @property
+    def graph(self) -> DependencyGraph:
+        if self._graph is None:
+            raise ValueError("Not parsed yet. Call parse() first.")
+        return self._graph
+
+    @property
+    def asset_registry(self) -> dict[Asset, AssetData]:
+        if self._asset_registry is None:
+            raise ValueError("Not parsed yet. Call parse() first.")
+        return self._asset_registry
 
     @staticmethod
     def __load_yaml(file: Path) -> dict[str, Any]:
@@ -85,7 +119,7 @@ class AssetsParser:
             return UUID(data)
         return None
 
-    def _parse(self, folder: Path) -> DependencyGraph:
+    def _parse(self, folder: Path) -> tuple[DependencyGraph, dict[Asset, AssetData]]:
         if not self.executor:
             return self._parse_no_thread(folder)
 
@@ -97,6 +131,8 @@ class AssetsParser:
         }
 
         graph = DependencyGraph()
+        asset_registry: dict[Asset, AssetData] = {}
+
         # FIXME: with python 3.14 it should be possible to
         # to switch to ThreadPool for same speedup
         with self.executor(max_workers=os.cpu_count()) as executor:
@@ -107,16 +143,18 @@ class AssetsParser:
             ]
 
             for fut in as_completed(futures):
-                result = fut.result()
-                if result is None:
+                chunk = fut.result()
+                if chunk is None:
                     continue
-                asset, deps, dents = result
-                graph.add_asset(asset, deps, dents)
+                graph.add_asset(chunk.asset, chunk.dependencies, chunk.dependents)
+                asset_registry.update(chunk.registry)
 
         graph.enforce_invariants()
-        return graph
+        return graph, asset_registry
 
-    def _parse_no_thread(self, folder: Path) -> DependencyGraph:
+    def _parse_no_thread(
+        self, folder: Path
+    ) -> tuple[DependencyGraph, dict[Asset, AssetData]]:
         mapping = {
             "charts/**/*.yaml": self._parse_charts,
             "dashboards/**/*.yaml": self._parse_dashboard,
@@ -125,48 +163,60 @@ class AssetsParser:
         }
 
         graph = DependencyGraph()
+        asset_registry: dict[Asset, AssetData] = {}
 
         for pattern, func in mapping.items():
             for path in folder.glob(pattern):
-                result = func(path)
-                if result is None:
+                chunk = func(path)
+                if chunk is None:
                     continue
-                asset, deps, dents = result
-                graph.add_asset(asset, deps, dents)
+                graph.add_asset(chunk.asset, chunk.dependencies, chunk.dependents)
+                asset_registry.update(chunk.registry)
 
         graph.enforce_invariants()
-        return graph
+        return graph, asset_registry
 
-    def _parse_charts(self, path: Path) -> tuple[Asset, set[Asset], set[Asset]] | None:
+    def _parse_charts(self, path: Path) -> _AssetChunk | None:
         """Parse a chart file
 
         Yields [chart, dependencies, dependents]
         """
 
         chart = self.__load_yaml(path)
-        if not (uuid := chart.get("uuid")):
+        if not (uuid := self.__parse_uuid(chart.get("uuid"))):
             log.warning(f"Chart: f{path} has no uuid. Skipping!")
             return None
 
+        registry = {}
         chart_asset = Asset(uuid=uuid, type=AssetType.CHART)
+        registry[chart_asset] = AssetData(
+            name=chart["slice_name"],
+        )
 
         # Charts has dataset as dependency
         dependencies = set()
         if dataset_uuid := self.__parse_uuid(chart.get("dataset_uuid")):
             dependencies.add(Asset(uuid=dataset_uuid, type=AssetType.DATASET))
+            # Datasets have no data here
 
-        return chart_asset, dependencies, set()
+        return _AssetChunk(
+            asset=chart_asset,
+            dependencies=dependencies,
+            dependents=set(),
+            registry=registry,
+        )
 
-    def _parse_dashboard(
-        self, path: Path
-    ) -> tuple[Asset, set[Asset], set[Asset]] | None:
+    def _parse_dashboard(self, path: Path) -> _AssetChunk | None:
         dashboard = self.__load_yaml(path)
-
-        if not (uuid := dashboard.get("uuid")):
+        if not (uuid := self.__parse_uuid(dashboard.get("uuid"))):
             log.warning(f"Dashboard: f{path} has no uuid. Skipping!")
             return None
 
+        registry = {}
         dashboard_asset = Asset(uuid=uuid, type=AssetType.DASHBOARD)
+        registry[dashboard_asset] = AssetData(
+            name=dashboard["dashboard_title"],
+        )
 
         dependencies = set()
         if theme_uuid := self.__parse_uuid(dashboard.get("theme_uuid")):
@@ -175,35 +225,59 @@ class AssetsParser:
         for position in dashboard.get("position", {}).values():
             if not isinstance(position, dict):
                 continue
-            if position.get("type") == "CHART" and (
-                chart_uuid := position.get("meta", {}).get("uuid")
-            ):
-                dependencies.add(Asset(chart_uuid, type=AssetType.CHART))
+            if position.get("type") == "CHART" and (meta := position.get("meta", {})):
+                if chart_uuid := self.__parse_uuid(meta.get("chartId")):
+                    chart_asset = Asset(chart_uuid, type=AssetType.CHART)
+                    registry[chart_asset] = AssetData(name=meta["sliceName"])
+                    dependencies.add(chart_asset)
 
-        return dashboard_asset, dependencies, set()
+        return _AssetChunk(
+            asset=dashboard_asset,
+            dependencies=dependencies,
+            dependents=set(),
+            registry=registry,
+        )
 
-    def _parse_database(
-        self, path: Path
-    ) -> tuple[Asset, set[Asset], set[Asset]] | None:
+    def _parse_database(self, path: Path) -> _AssetChunk | None:
         database = self.__load_yaml(path)
 
-        if not (uuid := database.get("uuid")):
+        if not (uuid := self.__parse_uuid(database.get("uuid"))):
             log.warning(f"Database: f{path} has no uuid. Skipping!")
             return None
 
-        return Asset(uuid=uuid, type=AssetType.DATABASE), set(), set()
+        registry = {}
+        database_asset = Asset(uuid=uuid, type=AssetType.DATABASE)
+        registry[database_asset] = AssetData(
+            name=database["database_name"],
+        )
 
-    def _parse_dataset(self, path: Path) -> tuple[Asset, set[Asset], set[Asset]] | None:
+        return _AssetChunk(
+            asset=database_asset,
+            dependencies=set(),
+            dependents=set(),
+            registry=registry,
+        )
+
+    def _parse_dataset(self, path: Path) -> _AssetChunk | None:
         dataset = self.__load_yaml(path)
 
-        if not (uuid := dataset.get("uuid")):
+        if not (uuid := self.__parse_uuid(dataset.get("uuid"))):
             log.warning(f"Database: f{path} has no uuid. Skipping!")
             return None
 
+        registry = {}
         dataset_asset = Asset(uuid=uuid, type=AssetType.DATASET)
+        registry[dataset_asset] = AssetData(
+            name=dataset["table_name"],
+        )
         # Charts has dataset as dependency
         dependencies = set()
         if database_uuid := self.__parse_uuid(dataset.get("database_uuid")):
             dependencies.add(Asset(uuid=database_uuid, type=AssetType.DATABASE))
 
-        return dataset_asset, dependencies, set()
+        return _AssetChunk(
+            asset=dataset_asset,
+            dependencies=dependencies,
+            dependents=set(),
+            registry=registry,
+        )
