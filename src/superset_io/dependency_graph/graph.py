@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import Literal
 from uuid import UUID
 
 from .assets import Asset, AssetType
@@ -154,3 +157,56 @@ class DependencyGraph:
             if a.uuid == asset:
                 return a
         return None
+
+    def get_subgraph(
+        self,
+        asset: str | UUID | Asset,
+        *,
+        direction: Literal["upstream", "downstream"] = "upstream",
+        include_root: bool = True,
+    ) -> DependencyGraph:
+        """Return a subgraph containing reachable assets from `asset`.
+
+        This traverses the graph in the specified direction to find all reachable
+        assets, preserving all edges between them.
+
+        Args:
+            asset: The root asset to get the subgraph for.
+            direction:
+                "upstream" => walk dependencies (find what `asset` depends on)
+                "downstream" => walk dependents (find what depends on `asset`)
+            include_root: Whether to include the root asset in the subgraph.
+
+        Returns:
+            A new DependencyGraph containing the subgraph.
+        """
+        root = self._asset_key(asset)
+        adj = self.dependencies if direction == "upstream" else self.dependents
+        subgraph = DependencyGraph()
+        visited: set[Asset] = set()
+
+        def dfs(node: Asset) -> None:
+            # depth first search
+            if node in visited:
+                return
+            visited.add(node)
+
+            for neighbor in adj.get(node, set()):
+                if direction == "upstream":
+                    # node depends on neighbor
+                    subgraph.add_dependency(node, neighbor)
+                else:
+                    # neighbor depends on node
+                    subgraph.add_dependency(neighbor, node)
+                dfs(neighbor)
+
+        if include_root:
+            dfs(root)
+        else:
+            for neighbor in adj.get(root, set()):
+                dfs(neighbor)
+
+        # Ensure the subgraph is consistent
+        subgraph.enforce_invariants()
+
+        return subgraph

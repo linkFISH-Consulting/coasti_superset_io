@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import TypeVar
 from uuid import UUID
 
@@ -52,3 +53,8 @@ class AssetData:
     """Additional data of an asset."""
 
     name: str
+
+    file_path: Path | None = None
+    """Includes path to the asset file if available.
+    May be used for more detailed info. Only available
+    if parsed from folder."""

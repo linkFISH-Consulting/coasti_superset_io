@@ -191,6 +191,7 @@ class AssetsParser:
         chart_asset = Asset(uuid=uuid, type=AssetType.CHART)
         registry[chart_asset] = AssetData(
             name=chart["slice_name"],
+            file_path=path,
         )
 
         # Charts has dataset as dependency
@@ -216,6 +217,7 @@ class AssetsParser:
         dashboard_asset = Asset(uuid=uuid, type=AssetType.DASHBOARD)
         registry[dashboard_asset] = AssetData(
             name=dashboard["dashboard_title"],
+            file_path=path,
         )
 
         dependencies = set()
@@ -228,7 +230,10 @@ class AssetsParser:
             if position.get("type") == "CHART" and (meta := position.get("meta", {})):
                 if chart_uuid := self.__parse_uuid(meta.get("chartId")):
                     chart_asset = Asset(chart_uuid, type=AssetType.CHART)
-                    registry[chart_asset] = AssetData(name=meta["sliceName"])
+                    if chart_asset not in registry:
+                        registry[chart_asset] = AssetData(
+                            name=meta["sliceName"],
+                        )
                     dependencies.add(chart_asset)
 
         return _AssetChunk(
@@ -249,6 +254,7 @@ class AssetsParser:
         database_asset = Asset(uuid=uuid, type=AssetType.DATABASE)
         registry[database_asset] = AssetData(
             name=database["database_name"],
+            file_path=path,
         )
 
         return _AssetChunk(
@@ -269,6 +275,7 @@ class AssetsParser:
         dataset_asset = Asset(uuid=uuid, type=AssetType.DATASET)
         registry[dataset_asset] = AssetData(
             name=dataset["table_name"],
+            file_path=path,
         )
         # Charts has dataset as dependency
         dependencies = set()
