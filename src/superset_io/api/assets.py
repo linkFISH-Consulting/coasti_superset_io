@@ -212,7 +212,6 @@ class AssetsApiClient(ClientBase):
             zipfile_buffer = zipfile_buffer_from_folder(src_path)
 
         validate_assets_bundle_structure(zipfile_buffer)
-
         self._import(
             zipfile_buffer=zipfile_buffer,
             sparse=sparse,

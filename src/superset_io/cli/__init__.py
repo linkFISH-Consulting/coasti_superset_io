@@ -1,7 +1,6 @@
 import logging
 import os
 import shutil
-import tempfile
 from pathlib import Path
 from typing import Annotated
 
@@ -10,7 +9,6 @@ import typer
 from dotenv import load_dotenv
 
 from superset_io.api import SupersetApiClient, SupersetApiSession
-from superset_io.dependency_graph.parser import AssetsParser
 from superset_io.utils import get_version
 
 from .explore import explore_app

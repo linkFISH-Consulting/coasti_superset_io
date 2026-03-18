@@ -7,19 +7,31 @@ from pathlib import Path
 import pytest
 
 from superset_io.api import SupersetApiClient
+from superset_io.dependency_graph import AssetsParser
 
 
 @pytest.mark.integration
 class TestApiClient:
     """Integration tests for dashboard export and import."""
 
-    def test_get_dashboards(self, superset_client: SupersetApiClient):
-        """Test that we can retrieve the list of dashboards."""
+    @pytest.fixture(autouse=True)
+    def seed_db(self, superset_client: SupersetApiClient):
+        """We start with an empty database, so we need to seed it with some assets."""
+        charts = superset_client.charts.get_all()
+        for chart in charts["result"]:
+            superset_client.charts.remove(chart["id"])
+
         dashboards = superset_client.dashboards.get_all()
-        assert isinstance(dashboards, dict)
-        # The response should have a 'result' key with dashboard list
-        assert "result" in dashboards
-        assert isinstance(dashboards["result"], list)
+        for dashboard in dashboards["result"]:
+            superset_client.dashboards.remove(dashboard["id"])
+
+        datasets = superset_client.datasets.get_all()
+        for dataset in datasets["result"]:
+            superset_client.datasets.remove(dataset["id"])
+
+        databases = superset_client.databases.get_all()
+        for database in databases["result"]:
+            superset_client.databases.remove(database["id"])
 
     def test_io_roundtrip(self, tmp_path, superset_client: SupersetApiClient):
         """Test upload of valid assets."""
@@ -40,6 +52,71 @@ class TestApiClient:
         # The uploaded dashboard should be included in the downloaded
         # assets
         assert (tmp_path / "dashboards" / "Test_Dash_1.yaml").exists()
+
+        # Assert same content
+        assets_dl = AssetsParser(tmp_path)
+        assets_original = AssetsParser(
+            Path(__file__).parent.parent / "assets" / "sample_assets"
+        )
+        assets_dl.parse()
+        assets_original.parse()
+
+        assert assets_dl.graph == assets_original.graph
+
+    def test_upload_select(self, superset_client: SupersetApiClient):
+        """Test upload of valid assets."""
+
+        # Upload folder with select
+        superset_client.assets.upload(
+            Path(__file__).parent.parent / "assets" / "sample_assets",
+            selected=["32fc72fd-e40c-453e-97d7-594baced4762"],
+            include_dependencies=True,
+        )
+
+        # Should include selected dashboard and its dependencies
+        # (charts -> dataset -> database)
+        charts = superset_client.charts.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], charts["result"])
+        assert "af8b8462-416f-480f-bbdf-abb068e1c400" in uuids
+
+        dashboards = superset_client.dashboards.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], dashboards["result"])
+        assert "32fc72fd-e40c-453e-97d7-594baced4762" in uuids
+
+        datasets = superset_client.datasets.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], datasets["result"])
+        assert "f19609fc-0ff0-4bf3-a563-4c6e8a74b759" in uuids
+
+        databases = superset_client.databases.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], databases["result"])
+        assert "f8a5145d-4469-43c4-b6cc-1b8a0097f3f9" in uuids
+
+    def test_upload_select_no_dependencies(self, superset_client: SupersetApiClient):
+        """Test upload of valid assets."""
+
+        # Upload folder with select but no dependencies
+        superset_client.assets.upload(
+            Path(__file__).parent.parent / "assets" / "sample_assets",
+            selected=["32fc72fd-e40c-453e-97d7-594baced4762"],
+            include_dependencies=False,
+        )
+
+        # Should include selected dashboard but not its dependencies
+        charts = superset_client.charts.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], charts["result"])
+        assert "af8b8462-416f-480f-bbdf-abb068e1c400" not in uuids
+
+        dashboards = superset_client.dashboards.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], dashboards["result"])
+        assert "32fc72fd-e40c-453e-97d7-594baced4762" in uuids
+
+        datasets = superset_client.datasets.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], datasets["result"])
+        assert "f19609fc-0ff0-4bf3-a563-4c6e8a74b759" not in uuids
+
+        databases = superset_client.databases.get_all()
+        uuids: map[str] = map(lambda x: x["uuid"], databases["result"])
+        assert "f8a5145d-4469-43c4-b6cc-1b8a0097f3f9" not in uuids
 
 
 @pytest.mark.integration
