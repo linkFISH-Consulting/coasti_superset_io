@@ -3,7 +3,10 @@ import logging
 import requests
 
 from .assets import AssetsApiClient
+from .charts import ChartsApiClient
 from .dashboards import DashboardApiClient
+from .databases import DatabasesApiClient
+from .datasets import DatasetsApiClient
 from .session import SupersetApiSession
 
 log = logging.getLogger("superset_io")
@@ -13,11 +16,17 @@ class SupersetApiClient:
     session: SupersetApiSession
     assets: AssetsApiClient
     dashboards: DashboardApiClient
+    charts: ChartsApiClient
+    datasets: DatasetsApiClient
+    databases: DatabasesApiClient
 
     def __init__(self, session: SupersetApiSession):
         self.session = session
         self.assets = AssetsApiClient(self)
         self.dashboards = DashboardApiClient(self)
+        self.charts = ChartsApiClient(self)
+        self.datasets = DatasetsApiClient(self)
+        self.databases = DatabasesApiClient(self)
 
     def test_connection(self) -> bool:
         """Test connection is possible.

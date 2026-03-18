@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Annotated
 
@@ -9,6 +10,7 @@ import typer
 from dotenv import load_dotenv
 
 from superset_io.api import SupersetApiClient, SupersetApiSession
+from superset_io.dependency_graph.parser import AssetsParser
 from superset_io.utils import get_version
 
 from .explore import explore_app
@@ -72,7 +74,7 @@ def main(
         return
 
     if not ctx.obj:
-        authenticate(
+        ctx.obj = authenticate(
             base_url,
             username,
             password,
@@ -188,7 +190,25 @@ def upload(
             help="Source zip or directory.",
         ),
     ],
+    select: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="Optionally specify UUIDs of assets to upload. If not given,"
+            " all assets will be uploaded. Can be given multiple times.",
+        ),
+    ] = None,
+    include_dependencies: Annotated[
+        bool,
+        typer.Option(
+            help="Whether to include dependencies of selected assets. "
+            " Only applies if --select is used.",
+        ),
+    ] = True,
 ):
     """Upload all assets from zip or yaml directory to server."""
 
-    ctx.obj.assets.upload(src_path)
+    ctx.obj.assets.upload(
+        src_path,
+        selected=select,
+        include_dependencies=include_dependencies,
+    )
