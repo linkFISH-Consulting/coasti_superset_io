@@ -44,7 +44,7 @@ class TestApiClient:
         # All assets should now be available
         dashboards = superset_client.dashboards.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], dashboards["result"])
-        assert "32fc72fd-e40c-453e-97d7-594baced4762" in uuids
+        assert "00000000-0000-0000-0000-da54b0aad000" in uuids
 
         # Download folder
         superset_client.assets.download(tmp_path)
@@ -69,7 +69,7 @@ class TestApiClient:
         # Upload folder with select
         superset_client.assets.upload(
             Path(__file__).parent.parent / "assets" / "sample_assets",
-            selected=["32fc72fd-e40c-453e-97d7-594baced4762"],
+            selected=["00000000-0000-0000-0000-da54b0aad000"],
             include_dependencies=True,
         )
 
@@ -77,19 +77,19 @@ class TestApiClient:
         # (charts -> dataset -> database)
         charts = superset_client.charts.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], charts["result"])
-        assert "af8b8462-416f-480f-bbdf-abb068e1c400" in uuids
+        assert "c1a87000-0000-0000-0000-000000000000" in uuids
 
         dashboards = superset_client.dashboards.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], dashboards["result"])
-        assert "32fc72fd-e40c-453e-97d7-594baced4762" in uuids
+        assert "00000000-0000-0000-0000-da54b0aad000" in uuids
 
         datasets = superset_client.datasets.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], datasets["result"])
-        assert "f19609fc-0ff0-4bf3-a563-4c6e8a74b759" in uuids
+        assert "00000000-da7a-5e70-0000-000000000000" in uuids
 
         databases = superset_client.databases.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], databases["result"])
-        assert "f8a5145d-4469-43c4-b6cc-1b8a0097f3f9" in uuids
+        assert "00000000-da7a-ba5e-0000-000000000000" in uuids
 
     def test_upload_select_no_dependencies(self, superset_client: SupersetApiClient):
         """Test upload of valid assets."""
@@ -97,26 +97,26 @@ class TestApiClient:
         # Upload folder with select but no dependencies
         superset_client.assets.upload(
             Path(__file__).parent.parent / "assets" / "sample_assets",
-            selected=["32fc72fd-e40c-453e-97d7-594baced4762"],
+            selected=["00000000-0000-0000-0000-da54b0aad000"],
             include_dependencies=False,
         )
 
         # Should include selected dashboard but not its dependencies
         charts = superset_client.charts.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], charts["result"])
-        assert "af8b8462-416f-480f-bbdf-abb068e1c400" not in uuids
+        assert "c1a87000-0000-0000-0000-000000000000" not in uuids
 
         dashboards = superset_client.dashboards.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], dashboards["result"])
-        assert "32fc72fd-e40c-453e-97d7-594baced4762" in uuids
+        assert "00000000-0000-0000-0000-da54b0aad000" in uuids
 
         datasets = superset_client.datasets.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], datasets["result"])
-        assert "f19609fc-0ff0-4bf3-a563-4c6e8a74b759" not in uuids
+        assert "00000000-da7a-5e70-0000-000000000000" not in uuids
 
         databases = superset_client.databases.get_all()
         uuids: map[str] = map(lambda x: x["uuid"], databases["result"])
-        assert "f8a5145d-4469-43c4-b6cc-1b8a0097f3f9" not in uuids
+        assert "00000000-da7a-ba5e-0000-000000000000" not in uuids
 
 
 @pytest.mark.integration
@@ -132,12 +132,12 @@ class TestDashboardEndpoints:
     @pytest.fixture
     def dashboard_uuid(self) -> str:
         """Return the UUID of the sample dashboard."""
-        return "32fc72fd-e40c-453e-97d7-594baced4762"
+        return "00000000-0000-0000-0000-da54b0aad000"
 
     @pytest.fixture
     def chart_uuid(self) -> str:
         """Return the UUID of the sample chart."""
-        return "af8b8462-416f-480f-bbdf-abb068e1c400"
+        return "c1a87000-0000-0000-0000-000000000000"
 
     def test_get(
         self,
@@ -185,7 +185,7 @@ class TestChartsEndpoints:
     @pytest.fixture
     def chart_uuid(self) -> str:
         """Return the UUID of the sample chart."""
-        return "af8b8462-416f-480f-bbdf-abb068e1c400"
+        return "c1a87000-0000-0000-0000-000000000000"
 
     def test_get(
         self,
@@ -227,7 +227,7 @@ class TestDatasetEndpoints:
     @pytest.fixture
     def dataset_uuid(self) -> str:
         """Return the UUID of the sample dataset."""
-        return "f19609fc-0ff0-4bf3-a563-4c6e8a74b759"
+        return "00000000-da7a-5e70-0000-000000000000"
 
     def test_get(
         self,
@@ -278,7 +278,7 @@ class TestDatabaseEndpoints:
     @pytest.fixture
     def database_uuid(self) -> str:
         """Return the UUID of the sample database."""
-        return "f8a5145d-4469-43c4-b6cc-1b8a0097f3f9"
+        return "00000000-da7a-ba5e-0000-000000000000"
 
     def test_get(
         self,

@@ -11,5 +11,5 @@ extra:
   allows_virtual_table_explore: true
 impersonate_user: false
 configuration_method: sqlalchemy_form
-uuid: f8a5145d-4469-43c4-b6cc-1b8a0097f3f9
+uuid: 00000000-da7a-ba5e-0000-000000000000
 version: 1.0.0
