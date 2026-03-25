@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from superset_io.api import SupersetApiClient, SupersetApiSession
 from superset_io.utils import get_version
 
+from .explore import explore_app
 from .utils import Context, catch_exception
 
 # Load env vars also from .env
@@ -22,7 +23,7 @@ app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_show_locals=False,
 )
-# app.add_typer(explore_app)
+app.add_typer(explore_app, name="explore")
 
 
 @app.callback()
@@ -67,6 +68,9 @@ def main(
 
     © coasti
     """
+    if ctx.invoked_subcommand in ["explore"]:
+        return
+
     if not ctx.obj:
         authenticate(
             base_url,

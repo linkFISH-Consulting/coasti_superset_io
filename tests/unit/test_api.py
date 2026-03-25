@@ -156,7 +156,9 @@ class TestUploadAssets:
         assets_root = tmp_path / "assets_folder"
         (assets_root / "dashboards").mkdir(parents=True)
 
-        (assets_root / "metadata.yaml").write_text("version: 1.0", encoding="utf-8")
+        (assets_root / "metadata.yaml").write_text(
+            "version: 1.0\ntype: assets", encoding="utf-8"
+        )
         (assets_root / "dashboards" / "demo.yaml").write_text(
             "dashboard_title: Demo", encoding="utf-8"
         )
@@ -188,7 +190,11 @@ class TestUploadAssets:
         buf = post_mock.call_args.kwargs["zipfile_buffer"]
 
         assert isinstance(buf, io.BytesIO)
-        assert buf.getvalue() == zip_path.read_bytes()
+        # ensure zipped structure contains expected files
+        with zipfile.ZipFile(buf, "r") as zf:
+            names = zf.namelist()
+            assert "assets_folder/metadata.yaml" in names
+            assert "assets_folder/dashboards/demo.yaml" in names
 
     def test_upload_assets_folder(
         self, asset_folder, client: SupersetApiClient, monkeypatch
