@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 from uuid import UUID
 
-import yaml
+from ruamel.yaml import YAML, YAMLError
 
 from .assets import Asset, AssetData, AssetType
 from .graph import DependencyGraph
@@ -103,8 +103,8 @@ class AssetsParser:
     def __load_yaml(file: Path) -> dict[str, Any]:
         try:
             with file.open(encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-        except yaml.YAMLError as e:
+                data = YAML(typ="safe").load(f)
+        except YAMLError as e:
             raise ParserError("Invalid YAML", file, cause=e) from e
 
         if data is None:
