@@ -188,18 +188,25 @@ def upload(
             help="Source zip or directory.",
         ),
     ],
+    skip: Annotated[
+        list[str] | None,
+        typer.Option(
+            help="Specify UUIDs of assets exclude from upload. Can be combined with "
+            "--select and gets applied after selection and dependency resolution.",
+        ),
+    ] = None,
     select: Annotated[
         list[str] | None,
         typer.Option(
-            help="Optionally specify UUIDs of assets to upload. If not given,"
-            " all assets will be uploaded. Can be given multiple times.",
+            help="Specify UUIDs of assets to upload. If not given, "
+            "all assets will be uploaded. Can be given multiple times.",
         ),
     ] = None,
     include_dependencies: Annotated[
         bool,
         typer.Option(
             help="Whether to include dependencies of selected assets. "
-            " Only applies if --select is used.",
+            "Only applies if --select is used. Skipped assets will be removed after",
         ),
     ] = True,
 ):
@@ -208,5 +215,6 @@ def upload(
     ctx.obj.assets.upload(
         src_path,
         selected=select,
+        skip=skip,
         include_dependencies=include_dependencies,
     )

@@ -6,7 +6,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from superset_io.dependency_graph import AssetsParser
+from superset_io.dependency_graph import Asset, AssetsParser
 from superset_io.utils import (
     validate_assets_bundle_structure,
     zipfile_buffer_from_folder,
@@ -96,6 +96,7 @@ class AssetsApiClient(ClientBase):
         self,
         src_path: Path,
         selected: list[str] | None = None,
+        skip: list[str] | None = None,
         include_dependencies: bool = False,
         overwrite: bool = True,
         sparse: bool = False,
@@ -107,6 +108,8 @@ class AssetsApiClient(ClientBase):
                 If directory, must directly contain the metadata.yaml file.
             select: Optional list of asset uuids to upload. If provided, only
                 these assets (and optionally their dependencies) will be uploaded.
+            skip: Optional list of asset uuids to _not_ upload. Overrules assets found
+                via ``select`` and ``include_dependencies``.
             include_dependencies: If True, automatically include all dependencies
                 of the selected assets. If False (default), only the explicitly
                 selected assets are uploaded, which may result in broken references.
@@ -138,6 +141,7 @@ class AssetsApiClient(ClientBase):
                 return self._upload_from_folder(
                     src_path,
                     selected,
+                    skip,
                     include_dependencies,
                     overwrite,
                     sparse,
@@ -146,6 +150,7 @@ class AssetsApiClient(ClientBase):
         return self._upload_from_folder(
             src_path,
             selected,
+            skip,
             include_dependencies,
             overwrite,
             sparse,
@@ -155,14 +160,14 @@ class AssetsApiClient(ClientBase):
         self,
         src_path: Path,
         selected: list[str] | None = None,
+        skip: list[str] | None = None,
         include_dependencies: bool = False,
         overwrite: bool = True,
         sparse: bool = False,
     ):
         """Upload and restore assets from disk.
 
-        src_path can be zip or directory.
-        If directory, needs to directly contain the metadata.yml.
+        src_path needs to be a directory directly containing the metadata.yml.
         """
         parser = AssetsParser(src_path)
         parser.parse()
@@ -170,16 +175,25 @@ class AssetsApiClient(ClientBase):
         registry = parser.asset_registry
         zipfile_buffer = None
 
-        if selected is not None:
-            selected_assets = set()
+        # only create a temporary folder if not uploading everything.
+        if selected is not None or skip is not None:
+
+            if selected is None:
+                selected = [str(a.uuid) for a in graph.assets]
+            if skip is None:
+                skip = []
+
+            # positive selection
+            selected_assets : set[Asset] = set()
             for sel in selected:
                 asset = graph.get_asset(sel)
                 if asset is None:
                     raise ValueError(
-                        f"Selected asset {sel!r} not found in {src_path!r}!"
+                        f"Asset to be selected {sel!r} not found in {src_path!r}!"
                     )
                 selected_assets.add(asset)
 
+            # dependencies of positive selection
             if include_dependencies:
                 to_visit = list(selected_assets)
                 while to_visit:
@@ -188,6 +202,15 @@ class AssetsApiClient(ClientBase):
                         if dep not in selected_assets:
                             selected_assets.add(dep)
                             to_visit.append(dep)
+
+            # apply negative selection last
+            for sel in skip:
+                asset = graph.get_asset(sel)
+                if asset is None:
+                    raise ValueError(
+                        f"Asset to be skipped {sel!r} not found in {src_path!r}!"
+                    )
+                selected_assets.discard(asset)
 
             # Extract selected assets to temp dir
             with tempfile.TemporaryDirectory() as tmpdir:

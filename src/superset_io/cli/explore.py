@@ -27,6 +27,7 @@ def load_assets(
         typer.Argument(
             file_okay=True,
             dir_okay=True,
+            exists=True,
             help="Source zip or directory.",
         ),
     ],
