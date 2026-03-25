@@ -15,7 +15,7 @@ extra: null
 normalize_columns: false
 always_filter_main_dttm: false
 folders: null
-uuid: f19609fc-0ff0-4bf3-a563-4c6e8a74b759
+uuid: 00000000-da7a-5e70-0000-000000000000
 metrics:
 - metric_name: count
   verbose_name: COUNT(*)
@@ -76,4 +76,4 @@ columns:
   python_date_format: null
   extra: null
 version: 1.0.0
-database_uuid: f8a5145d-4469-43c4-b6cc-1b8a0097f3f9
+database_uuid: 00000000-da7a-ba5e-0000-000000000000

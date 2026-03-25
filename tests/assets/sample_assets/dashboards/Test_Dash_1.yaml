@@ -5,7 +5,7 @@ slug: null
 certified_by: ''
 certification_details: ''
 published: false
-uuid: 32fc72fd-e40c-453e-97d7-594baced4762
+uuid: 00000000-0000-0000-0000-da54b0aad000
 position:
   CHART-vDFGH4UDCyJsxnWDiUQSa:
     children: []
@@ -14,7 +14,7 @@ position:
       chartId: 1
       height: 50
       sliceName: Age
-      uuid: af8b8462-416f-480f-bbdf-abb068e1c400
+      uuid: c1a87000-0000-0000-0000-000000000000
       width: 4
     parents:
     - ROOT_ID

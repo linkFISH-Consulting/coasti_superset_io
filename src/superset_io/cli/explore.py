@@ -22,16 +22,17 @@ class Context(typer.Context):
 @explore_app.callback()
 def load_assets(
     ctx: Context,
-    dst_path: Annotated[
+    src_path: Annotated[
         Path,
         typer.Argument(
             file_okay=True,
             dir_okay=True,
-            help="Destination zip or directory.",
+            exists=True,
+            help="Source zip or directory.",
         ),
     ],
 ):
-    parser = AssetsParser(dst_path)
+    parser = AssetsParser(src_path)
     ctx.obj = parser
     parser.parse()
 
@@ -39,7 +40,7 @@ def load_assets(
 @explore_app.command(name="list")
 def list_(
     ctx: Context,
-    uuids: Annotated[bool, typer.Option(help="Whether to show UUIDs.")] = False,
+    uuids: Annotated[bool, typer.Option(help="Whether to show UUIDs.")] = True,
 ):
     """List assets from a downloaded assets folder or zip."""
     graph = ctx.obj.graph
@@ -68,7 +69,7 @@ def graph(
     direction: Annotated[
         Literal["upstream", "downstream"] | None, typer.Option(help="")
     ] = None,
-    uuids: Annotated[bool, typer.Option(help="Whether to show UUIDs.")] = False,
+    uuids: Annotated[bool, typer.Option(help="Whether to show UUIDs.")] = True,
 ):
     """Dependency graph of a specific asset."""
     asset_ = prompt_for_asset(

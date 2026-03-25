@@ -15,3 +15,9 @@ class DashboardApiClient(ClientBase):
         res = self.session.get(url)
         res.raise_for_status()
         return res.json()
+
+    def remove(self, dashboard_id_or_slug: int | str) -> None:
+        """Delete a dashboard."""
+        dashboard = self.get(dashboard_id_or_slug)
+        res = self.session.delete(f"/api/v1/dashboard/{dashboard['result']['id']}")
+        res.raise_for_status()

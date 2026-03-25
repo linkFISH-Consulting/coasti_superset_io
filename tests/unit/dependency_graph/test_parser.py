@@ -204,8 +204,9 @@ position:
   CHART-1:
     type: CHART
     meta:
-      chartId: {chart_uuid}
+      chartId: 1
       sliceName: test_chart
+      uuid: {chart_uuid}
 """,
             encoding="utf-8",
         )

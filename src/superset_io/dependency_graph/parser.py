@@ -147,7 +147,15 @@ class AssetsParser:
                 if chunk is None:
                     continue
                 graph.add_asset(chunk.asset, chunk.dependencies, chunk.dependents)
-                asset_registry.update(chunk.registry)
+
+                # Smartly merge asset registry: if we have more metadata for an asset
+                # use it
+                for key, values in chunk.registry.items():
+                    existing = asset_registry.get(key, None)
+                    if values.file_path is not None or (
+                        existing and existing.file_path is None
+                    ):
+                        asset_registry[key] = values
 
         graph.enforce_invariants()
         return graph, asset_registry
@@ -228,7 +236,7 @@ class AssetsParser:
             if not isinstance(position, dict):
                 continue
             if position.get("type") == "CHART" and (meta := position.get("meta", {})):
-                if chart_uuid := self.__parse_uuid(meta.get("chartId")):
+                if chart_uuid := self.__parse_uuid(meta.get("uuid")):
                     chart_asset = Asset(chart_uuid, type=AssetType.CHART)
                     if chart_asset not in registry:
                         registry[chart_asset] = AssetData(
