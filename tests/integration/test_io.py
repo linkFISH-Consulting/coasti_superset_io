@@ -118,6 +118,72 @@ class TestApiClient:
         uuids: map[str] = map(lambda x: x["uuid"], databases["result"])
         assert "00000000-da7a-ba5e-0000-000000000000" not in uuids
 
+    @pytest.mark.parametrize(
+        "test_case",
+        [
+            {
+                # Skip with no selection given. skip chart to avoid upload errors
+                "selected": None,
+                "skip": ["c1a87000-0000-0000-0000-000000000000"],
+                "expected_include": [
+                    "00000000-0000-0000-0000-da54b0aad000",
+                    "00000000-da7a-5e70-0000-000000000000",
+                    "00000000-da7a-ba5e-0000-000000000000",
+                ],
+                "expected_exclude": [
+                    "c1a87000-0000-0000-0000-000000000000",
+                ],
+            },
+            {
+                # Skip an asset that was selected
+                "selected": [
+                    "00000000-0000-0000-0000-da54b0aad000",
+                    "c1a87000-0000-0000-0000-000000000000",
+                ],
+                "skip": ["c1a87000-0000-0000-0000-000000000000"],
+                "expected_include": ["00000000-0000-0000-0000-da54b0aad000"],
+                "expected_exclude": ["c1a87000-0000-0000-0000-000000000000"],
+            },
+            {
+                # Skip a dependency
+                "selected": ["c1a87000-0000-0000-0000-000000000000"],
+                "skip": [
+                    "00000000-0000-0000-0000-da54b0aad000",
+                ],
+                "expected_include": [
+                    "c1a87000-0000-0000-0000-000000000000",
+                    "00000000-da7a-5e70-0000-000000000000",
+                    "00000000-da7a-ba5e-0000-000000000000",
+                ],
+                "expected_exclude": [
+                    "00000000-0000-0000-0000-da54b0aad000",
+                ],
+            },
+        ],
+    )
+    def test_upload_skip(self, superset_client: SupersetApiClient, test_case):
+        """Test upload with skip parameter."""
+        # Upload with specified selection and skip
+        superset_client.assets.upload(
+            Path(__file__).parent.parent / "assets" / "sample_assets",
+            selected=test_case["selected"],
+            skip=test_case["skip"],
+            include_dependencies=True,
+        )
+
+        # Get uuids for all asset types
+        uuids = []
+        for asset_type in ["dashboards", "charts", "datasets", "databases"]:
+            api_method = getattr(superset_client, asset_type)
+            assets = api_method.get_all()
+            uuids.extend([x["uuid"] for x in assets["result"]])
+
+        for uuid in test_case["expected_include"]:
+            assert uuid in uuids
+
+        for uuid in test_case["expected_exclude"]:
+            assert uuid not in uuids
+
 
 @pytest.mark.integration
 class TestDashboardEndpoints:

@@ -177,14 +177,14 @@ class AssetsApiClient(ClientBase):
 
         # only create a temporary folder if not uploading everything.
         if selected is not None or skip is not None:
-
             if selected is None:
                 selected = [str(a.uuid) for a in graph.assets]
             if skip is None:
                 skip = []
+            sparse = True  # Always use sparse when selecting assets
 
             # positive selection
-            selected_assets : set[Asset] = set()
+            selected_assets: set[Asset] = set()
             for sel in selected:
                 asset = graph.get_asset(sel)
                 if asset is None:
@@ -228,7 +228,6 @@ class AssetsApiClient(ClientBase):
                         shutil.copyfile(asset_data.file_path, dst_file)
 
                 zipfile_buffer = zipfile_buffer_from_folder(tmppath)
-                sparse = True  # Always use sparse when selecting assets
 
         # Create zip buffer from src_path
         if zipfile_buffer is None:
