@@ -10,7 +10,7 @@ def get_version():
     from importlib import metadata
 
     try:
-        return metadata.version("superset-io")
+        return metadata.version("coasti-superset-io")
     except metadata.PackageNotFoundError:
         return "[not found] Use `uv sync` when developing!"
 

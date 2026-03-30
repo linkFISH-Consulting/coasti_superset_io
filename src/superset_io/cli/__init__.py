@@ -68,7 +68,7 @@ def main(
 
     © coasti
     """
-    if ctx.invoked_subcommand in ["explore"]:
+    if ctx.invoked_subcommand in ["explore", "version"]:
         return
 
     if not ctx.obj:
@@ -126,14 +126,7 @@ def authenticate(
 @app.command()
 def version():
     """Shows version and exit."""
-    log.info(f"Coasti version {get_version()}")
-
-    from importlib import metadata
-
-    try:
-        return metadata.version("coasti")
-    except metadata.PackageNotFoundError:
-        return "[not found] Use `uv sync` when developing!"
+    log.info(f"coasti-superset-io version {get_version()}")
 
 
 @app.command()
