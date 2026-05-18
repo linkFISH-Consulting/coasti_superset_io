@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from superset_io.api import SupersetApiClient, SupersetApiSession
 from superset_io.utils import get_version
 
+from .copy import copy_app
 from .explore import explore_app
 from .utils import Context, catch_exception
 
@@ -24,6 +25,7 @@ app = typer.Typer(
     pretty_exceptions_show_locals=False,
 )
 app.add_typer(explore_app, name="explore")
+app.add_typer(copy_app)
 
 
 @app.callback()
@@ -68,7 +70,7 @@ def main(
 
     © coasti
     """
-    if ctx.invoked_subcommand in ["explore", "version"]:
+    if ctx.invoked_subcommand in ["explore", "version", "copy"]:
         return
 
     if not ctx.obj:

@@ -6,7 +6,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from superset_io.dependency_graph import Asset, AssetsParser
+from superset_io.dependency_graph import Asset, AssetsParser, DependencyGraph
 from superset_io.utils import (
     validate_assets_bundle_structure,
     zipfile_buffer_from_folder,
@@ -177,40 +177,13 @@ class AssetsApiClient(ClientBase):
 
         # only create a temporary folder if not uploading everything.
         if selected is not None or skip is not None:
-            if selected is None:
-                selected = [str(a.uuid) for a in graph.assets]
-            if skip is None:
-                skip = []
+            selected_assets = select_assets(
+                graph,
+                selected,
+                skip,
+                include_dependencies,
+            )
             sparse = True  # Always use sparse when selecting assets
-
-            # positive selection
-            selected_assets: set[Asset] = set()
-            for sel in selected:
-                asset = graph.get_asset(sel)
-                if asset is None:
-                    raise ValueError(
-                        f"Asset to be selected {sel!r} not found in {src_path!r}!"
-                    )
-                selected_assets.add(asset)
-
-            # dependencies of positive selection
-            if include_dependencies:
-                to_visit = list(selected_assets)
-                while to_visit:
-                    current = to_visit.pop()
-                    for dep in graph.get_dependencies(current):
-                        if dep not in selected_assets:
-                            selected_assets.add(dep)
-                            to_visit.append(dep)
-
-            # apply negative selection last
-            for sel in skip:
-                asset = graph.get_asset(sel)
-                if asset is None:
-                    raise ValueError(
-                        f"Asset to be skipped {sel!r} not found in {src_path!r}!"
-                    )
-                selected_assets.discard(asset)
 
             # Extract selected assets to temp dir
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -282,3 +255,56 @@ class AssetsApiClient(ClientBase):
 
                 for item in src_folders[0].iterdir():
                     shutil.move(item, dst_path / item.name)
+
+
+def select_assets(
+    graph: DependencyGraph,
+    selected: list[str] | None = None,
+    skip: list[str] | None = None,
+    include_dependencies: bool = False,
+) -> set[Asset]:
+    """Select a subset of assets based on criteria.
+
+    Args:
+        graph: The dependency graph containing assets.
+        selected: Optional list of asset UUIDs to include. If None, all assets
+            are selected.
+        skip: Optional list of asset UUIDs to exclude. Applied after selection.
+        include_dependencies: If True, include all upstream dependencies of
+            selected assets.
+
+    Returns:
+        A set of selected Asset objects.
+
+    Raises:
+        ValueError: If a selected asset is not found in the graph.
+    """
+    if selected is None:
+        selected_assets: set[Asset] = set(graph.assets)
+    else:
+        selected_assets = set()
+        for sel in selected:
+            asset = graph.get_asset(sel)
+            if asset is None:
+                raise ValueError(f"Asset {sel!r} not found in graph!")
+            selected_assets.add(asset)
+
+        # Include dependencies if requested (only makes sense when selecting)
+        if include_dependencies:
+            to_visit = list(selected_assets)
+            while to_visit:
+                current = to_visit.pop()
+                for dep in graph.get_dependencies(current):
+                    if dep not in selected_assets:
+                        selected_assets.add(dep)
+                        to_visit.append(dep)
+
+    # Apply negative selection (skip)
+    if skip:
+        for sel in skip:
+            asset = graph.get_asset(sel)
+            if asset is None:
+                raise ValueError(f"Asset to skip {sel!r} not found in graph!")
+            selected_assets.discard(asset)
+
+    return selected_assets

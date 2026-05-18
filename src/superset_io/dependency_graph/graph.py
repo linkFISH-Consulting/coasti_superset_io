@@ -119,6 +119,11 @@ class DependencyGraph:
             all_assets.update(frms)
         return all_assets
 
+    @property
+    def root_assets(self) -> set[Asset]:
+        """Return assets that have no upstream dependencies."""
+        return {a for a in self.assets if not self.dependencies.get(a)}
+
     def assets_of_type(self, *types: AssetType) -> set[Asset]:
         """Return all assets whose type is in `types`."""
         if not types:

@@ -98,4 +98,4 @@ class SupersetApiClient:
         return True
 
 
-__all__ = ["SupersetApiClient"]
+__all__ = ["SupersetApiClient", "SupersetApiSession"]
